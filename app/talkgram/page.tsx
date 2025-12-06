@@ -5,27 +5,61 @@ import type React from "react";
 import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 
+type Role = "user" | "assistant";
+
+interface Message {
+  role: Role;
+  text: string;
+}
+
 export default function TalkGramPage() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Message[]>([
     {
-      role: "assistant" as const,
+      role: "assistant",
       text: "Olá! Sou o TalkGram, seu assistente inteligente. Como posso ajudar hoje?",
     },
   ]);
 
-  const handleSend = (msg: string) => {
-    if (!msg.trim()) return;
+  const [isLoading, setIsLoading] = useState(false);
 
-    const userMsg = { role: "user" as const, text: msg };
+  const handleSend = async (msg: string) => {
+    if (!msg.trim() || isLoading) return;
+
+    const userMsg: Message = { role: "user", text: msg };
     setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
 
-    setTimeout(() => {
-      const aiMsg = {
-        role: "assistant" as const,
-        text: "Recebi sua mensagem! Em breve conectaremos ao Gemini. 😄",
+    try {
+      const res = await fetch("/api/talkgram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Erro na API");
+      }
+
+      const data = await res.json();
+      const replyText: string =
+        data.reply || "Não consegui responder agora. Tente novamente.";
+
+      const aiMsg: Message = {
+        role: "assistant",
+        text: replyText,
       };
+
       setMessages((prev) => [...prev, aiMsg]);
-    }, 700);
+    } catch (error) {
+      console.error(error);
+      const errorMsg: Message = {
+        role: "assistant",
+        text: "Tive um problema ao falar com o Gemini. Tente novamente em alguns instantes.",
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ====== ESTILOS ======
@@ -33,7 +67,7 @@ export default function TalkGramPage() {
   const pageStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    height: "85vh",
+    height: "100vh",
     backgroundColor: "#0f1115",
   };
 
@@ -61,7 +95,6 @@ export default function TalkGramPage() {
     objectFit: "cover",
   };
 
-  // wrapper do título (sem cor fixa)
   const titleWrapperStyle: React.CSSProperties = {
     fontSize: 20,
     fontWeight: 700,
@@ -86,13 +119,8 @@ export default function TalkGramPage() {
   return (
     <div style={pageStyle}>
       <header style={headerStyle}>
-        {/* PRIMEIRA LINHA: LOGO + TÍTULO */}
         <div style={headerInnerStyle}>
-          <img
-            src="/talkgram-logo.png"
-            alt="TalkGram"
-            style={logoStyle}
-          />
+          <img src="/talkgram-logo.png" alt="TalkGram" style={logoStyle} />
 
           <div style={titleWrapperStyle}>
             <span style={{ color: "#22c55e" }}>TalkGram -</span>
@@ -100,7 +128,6 @@ export default function TalkGramPage() {
           </div>
         </div>
 
-        {/* SEGUNDA LINHA: DESCRIÇÃO CENTRALIZADA */}
         <div style={subtitleStyle}>
           Plataforma de conversa com inteligência artificial do ecossistema NeoGram.
         </div>
@@ -110,6 +137,13 @@ export default function TalkGramPage() {
         {messages.map((m, i) => (
           <ChatMessage key={i} role={m.role} text={m.text} />
         ))}
+
+        {isLoading && (
+          <ChatMessage
+            role="assistant"
+            text="Pensando na melhor resposta..."
+          />
+        )}
       </main>
 
       <ChatInput onSend={handleSend} />
