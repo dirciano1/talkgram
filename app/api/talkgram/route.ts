@@ -1,18 +1,26 @@
-// app/api/talkgram/route.js
-import { NextResponse } from "next/server";
-import { adminDb, admin } from "@/lib/firebaseServer"; 
-// ^ ajuste esse import conforme está no seu projeto
+// app/api/talkgram/route.ts
+export const runtime = "nodejs"; // importante por causa do firebase-admin
 
-// Se você usa Gemini ou OpenAI, importe aqui.
-// Exemplo fictício:
+import { NextResponse } from "next/server";
+import { adminDb, admin } from "@/lib/firebaseServer";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-export async function POST(req) {
+type Mensagem = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
+type BodyTalkgram = {
+  uid?: string;
+  mensagens?: Mensagem[];
+};
+
+export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as BodyTalkgram;
     const { uid, mensagens } = body;
 
     if (!uid) {
@@ -29,19 +37,16 @@ export async function POST(req) {
       );
     }
 
-    // ==========================
     // 1) BUSCA / CRIA USUÁRIO
-    // ==========================
-    const userRef = adminDb.collection("usuarios").doc(uid); // mesma coleção do BetGram
+    const userRef = adminDb.collection("usuarios").doc(uid);
     const userSnap = await userRef.get();
 
-    let dadosUser;
+    let dadosUser: any;
 
     if (!userSnap.exists) {
-      // Primeiro acesso → cria doc com crédito inicial
       dadosUser = {
         uid,
-        creditos: 10, // ou 0 se quiser
+        creditos: 10, // crédito inicial
         criadoEm: admin.firestore.FieldValue.serverTimestamp(),
         origem: "talkgram",
       };
@@ -50,11 +55,9 @@ export async function POST(req) {
       dadosUser = userSnap.data();
     }
 
-    let creditosAtuais = Number(dadosUser.creditos ?? 0);
+    let creditosAtuais = Number(dadosUser?.creditos ?? 0);
 
-    // ==========================
     // 2) VERIFICA CRÉDITOS
-    // ==========================
     if (creditosAtuais <= 0) {
       return NextResponse.json(
         {
@@ -65,39 +68,33 @@ export async function POST(req) {
       );
     }
 
-    // ==========================
-    // 3) MONTA PROMPT E CHAMA IA
-    // ==========================
-
+    // 3) MONTA PROMPT
     const historicoTexto = mensagens
       .map((m) => {
-        const prefixo = m.role === "user" ? "Usuário:" : "Assistente:";
+        const prefixo =
+          m.role === "user"
+            ? "Usuário:"
+            : m.role === "assistant"
+            ? "Assistente:"
+            : "Sistema:";
         return `${prefixo} ${m.content}`;
       })
       .join("\n\n");
 
     const sistema = `
-Você é o TalkGram, assistente de texto do ecossistema NeoGram, focado em:
-- negócios
-- apostas esportivas
-- investimentos
-- produtividade
-- organização de ideias
-
-Responda sempre em português brasileiro, de forma clara e prática.
-Se o usuário pedir algo fora desses temas, ainda ajude, mas tente conectar a organização de vida, dinheiro, negócios ou produtividade.
+Você é o TalkGram, assistente de texto do ecossistema NeoGram.
+Foque em:
+- negócios, renda, marketing, produtividade
+- apostas esportivas, investimentos, criptomoedas
+Responda SEMPRE em português do Brasil, de forma direta e prática.
 `;
 
-    const promptFinal = `${sistema}\n\nHistórico de conversa:\n${historicoTexto}\n\nResponda a última mensagem do usuário de forma útil e objetiva.`;
+    const promptFinal = `${sistema}\n\nHistórico de conversa:\n${historicoTexto}\n\nResponda a última mensagem do usuário da forma mais útil possível.`;
 
-    // Exemplo com Gemini (ajuste se estiver usando outra coisa)
     const result = await model.generateContent(promptFinal);
     const respostaIA = result.response.text();
 
-    // ==========================
     // 4) DEBITA 1 CRÉDITO
-    // ==========================
-
     creditosAtuais = creditosAtuais - 1;
 
     await userRef.update({
@@ -105,20 +102,18 @@ Se o usuário pedir algo fora desses temas, ainda ajude, mas tente conectar a or
       ultimaInteracaoTalkgram: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // ==========================
-    // 5) DEVOLVE PARA FRONT
-    // ==========================
+    // 5) RETORNA PRO FRONT
     return NextResponse.json({
       resposta: respostaIA,
       creditos: creditosAtuais,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro na rota /api/talkgram:", error);
 
     return NextResponse.json(
       {
         error: "Erro interno ao processar a conversa no TalkGram.",
-        detalhe: error.message ?? String(error),
+        detalhe: error?.message ?? String(error),
       },
       { status: 500 }
     );
