@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Você pode trocar depois para "gemini-1.5-pro" se quiser
-const GEMINI_MODEL = "gemini-1.5-flash";
+
+// Usa o modelo vindo da env ou, se não tiver, o padrão gemini-2.5-flash
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 export async function POST(req: NextRequest) {
   if (!GEMINI_API_KEY) {
@@ -33,7 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    // 👇 API v1 com o modelo configurável (gemini-2.5-flash)
+    const url = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const response = await fetch(url, {
       method: "POST",
