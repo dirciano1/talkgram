@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-// Usa o modelo vindo da env ou, se não tiver, o padrão gemini-2.5-flash
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 // 🧠 Instrução fixa do TalkGram
@@ -25,17 +23,33 @@ ECOSSISTEMA NEOGRAM (SEUS LIMITES):
   - estratégias para vender mais,
   - ideias de conteúdo e posicionamento,
   - gestão financeira básica ligada a lucro e negócios,
-  - ferramentas e fluxos que possam ser automatizados pelo ecossistema NeoGram.
+  - análise e explicação de textos de documentos de investimentos que o usuário enviar no chat.
 
-ASSUNTOS QUE VOCÊ NÃO RESPONDE:
-- Se o usuário pedir coisas fora desse nicho (exemplos):
-  - remédios, tratamentos, diagnósticos, saúde física ou mental;
-  - conselhos de relacionamento pessoal (amoroso, familiar, etc.) sem relação com negócio;
-  - religião, política, fofoca, celebridades, entretenimento aleatório;
-  - temas que não tenham ligação clara com: ganhar dinheiro, negócios, investimentos, IA, apostas, cripto.
-- Nesses casos, responda de forma curta, por exemplo:
-  - "Meu foco é apenas em negócios, apostas, investimentos, cripto e o ecossistema NeoGram. Esse assunto foge do meu escopo."
-  - Nunca tente dar recomendações médicas, indicar remédios ou fazer diagnóstico.
+ASSUNTOS FORA DO ESCOPO:
+- Se o usuário pedir coisas que não tenham relação clara com ganhar dinheiro / negócios / investimentos / IA / apostas / cripto, responda curto dizendo que isso foge do foco do TalkGram.
+- Nunca dê indicação de remédio, diagnóstico médico ou orientação de saúde.
+
+SOBRE DOCUMENTAÇÃO E BUSCA NA WEB:
+- Você NÃO acessa documentos sozinho (PDF, relatórios, etc.), mas PODE analisar qualquer texto que o usuário colar no chat.
+- Você PODE usar a internet (Google Search) quando isso ajudar a responder perguntas de mercado, notícias, contexto atual ou dados mais recentes.
+- Quando o usuário pedir cotação de hoje, notícias recentes, mudanças recentes em um ativo, use a busca na web para tentar trazer informação atualizada.
+- Mesmo usando a web, lembre o usuário que:
+  - preços e cotações mudam o tempo todo,
+  - isso NÃO é recomendação personalizada de compra ou venda.
+
+SOBRE REFERÊNCIAS COMO "ELE", "DELE", "ESSE FUNDO":
+- Você sempre recebe o histórico recente da conversa junto com a pergunta atual.
+- Use esse histórico para descobrir se o usuário está falando de um ATIVO específico (por exemplo: "MXRF11", "PETR4", "VALE3", etc.).
+- Se em mensagens anteriores o usuário mencionou um ativo e depois perguntar coisas como:
+  - "e o pvp dele?"
+  - "qual o dy dele?"
+  - "e a liquidez dele?"
+  - "você acha que vale a pena comprar ele?"
+  então ASSUMA que "ele/dele" se refere ao MESMO ATIVO citado antes.
+- Nesses casos, dê preferência a respostas específicas ligadas ao ativo em foco. Você pode:
+  1) Deixar claro sobre qual ativo está falando ("No caso do FII MXRF11...").
+  2) Tentar usar a web para trazer o dado aproximado.
+  3) Se não encontrar, avise que não encontrou o valor exato e então explique o conceito de forma geral.
 
 REGRAS DE ESTILO:
 - Fale sempre em português do Brasil.
@@ -55,18 +69,16 @@ IDENTIDADE:
   - aproveitar BetGram, InvestGram, BusinessGram e CryptoGram.
 `;
 
-// ==========================
-
 export async function POST(req: NextRequest) {
   if (!GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY não configurada");
     return NextResponse.json(
-      { error: "Chave do Gemini não configurada no servidor." },
+      { error: "Chave do Gemini não configurada" },
       { status: 500 }
     );
   }
 
-  let body: unknown;
+  let body: any;
   try {
     body = await req.json();
   } catch {
@@ -76,18 +88,44 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const message = (body as { message?: string }).message;
+  const history = body.history as { role: "user" | "assistant"; text: string }[] | undefined;
+  const singleMessage = body.message as string | undefined;
 
-  if (!message || typeof message !== "string") {
+  if ((!history || !Array.isArray(history) || history.length === 0) && !singleMessage) {
     return NextResponse.json(
-      { error: "Campo 'message' é obrigatório." },
+      { error: "É necessário enviar 'history' ou 'message'." },
       { status: 400 }
     );
   }
 
+  // Monta o "contents" no formato da API do Gemini
+  let contents: any[] = [];
+
+  // Primeiro, o system prompt como mensagem de usuário (contexto)
+  contents.push({
+    role: "user",
+    parts: [{ text: SYSTEM_PROMPT }],
+  });
+
+  if (history && Array.isArray(history) && history.length > 0) {
+    // Converte o histórico em mensagens user/model
+    const mapped = history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.text }],
+    }));
+
+    contents = contents.concat(mapped);
+  } else if (singleMessage) {
+    // Fallback: só uma mensagem simples
+    contents.push({
+      role: "user",
+      parts: [{ text: singleMessage }],
+    });
+  }
+
   try {
-    // 👇 API v1 com o modelo configurável (gemini-2.5-flash)
-    const url = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    // Usa v1beta porque estamos usando tools.google_search
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -95,16 +133,10 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // 🧠 Persona fixa do TalkGram
-        systemInstruction: {
-          role: "system",
-          parts: [{ text: SYSTEM_PROMPT }],
-        },
-        // 💬 Mensagem do usuário
-        contents: [
+        contents,
+        tools: [
           {
-            role: "user",
-            parts: [{ text: message }],
+            google_search: {},
           },
         ],
       }),
@@ -132,7 +164,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ reply: replyText });
   } catch (err) {
-    console.error("Erro de rede ou inesperado ao chamar o Gemini:", err);
+    console.error("Erro de rede ou inesperado ao falar com o Gemini:", err);
     return NextResponse.json(
       { error: "Falha de rede ao falar com o Gemini." },
       { status: 500 }
