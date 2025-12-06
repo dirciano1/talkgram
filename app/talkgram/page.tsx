@@ -12,11 +12,14 @@ interface Message {
   text: string;
 }
 
+// Limite de mensagens que vão para o contexto (pra não pesar demais)
+const MAX_HISTORY = 12;
+
 export default function TalkGramPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      text: "Olá! Sou o TalkGram, seu assistente inteligente. Como posso ajudar hoje?",
+      text: "Olá! Sou o TalkGram, seu assistente de texto do ecossistema NeoGram. Como posso te ajudar hoje a ganhar dinheiro, estruturar seus negócios ou usar a inteligência artificial a seu favor?",
     },
   ]);
 
@@ -26,14 +29,20 @@ export default function TalkGramPage() {
     if (!msg.trim() || isLoading) return;
 
     const userMsg: Message = { role: "user", text: msg };
+
+    // Atualiza a UI imediatamente
     setMessages((prev) => [...prev, userMsg]);
+
+    // Histórico que será enviado para a API
+    const historyToSend = [...messages, userMsg].slice(-MAX_HISTORY);
+
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/talkgram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg }),
+        body: JSON.stringify({ history: historyToSend }),
       });
 
       if (!res.ok) {
