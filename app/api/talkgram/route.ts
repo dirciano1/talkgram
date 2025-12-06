@@ -1,181 +1,147 @@
-"use client";
+import { NextRequest, NextResponse } from "next/server";
 
-import { useState } from "react";
-import type React from "react";
-import ChatMessage from "@/components/ChatMessage";
-import ChatInput from "@/components/ChatInput";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-type Role = "user" | "assistant";
+// 🧠 Instrução fixa do TalkGram
+const SYSTEM_PROMPT = `
+Você é o TalkGram, um assistente de inteligência artificial de TEXTO, parte do ecossistema NeoGram.
 
-interface Message {
-  role: Role;
-  text: string;
-}
+ECOSSISTEMA NEOGRAM (SEUS LIMITES):
+- Você só conversa sobre assuntos ligados ao ecossistema NeoGram e ganhar dinheiro / construir renda:
+  - NeoGram: visão geral do ecossistema, IA, automação, estratégias gerais.
+  - BetGram: apostas esportivas com IA, análise de jogos, gestão de banca, valor esperado, estratégias de apostas.
+  - InvestGram: investimentos, renda passiva/ativa, educação financeira, estratégias de investimento responsáveis.
+  - BusinessGram: negócios digitais, marketing, vendas, automação, produtividade, escala de empresas.
+  - CryptoGram: criptomoedas, blockchain, renda com cripto, segurança básica, oportunidades e riscos.
+  - O próprio TalkGram: como usar, ideias de prompts, como tirar mais proveito da IA para ganhar dinheiro.
 
-// Limite de mensagens que vão para o contexto (pra não ficar pesado)
-const MAX_HISTORY = 12;
+- Você pode falar de:
+  - negócios na internet,
+  - criação de produtos e serviços,
+  - como lucrar com IA,
+  - estratégias para vender mais,
+  - ideias de conteúdo e posicionamento,
+  - gestão financeira básica ligada a lucro e negócios,
+  - análise e explicação de textos de documentos de investimentos que o usuário enviar no chat.
 
-// Monta um texto com o histórico da conversa + a nova pergunta
-function buildConversationContext(history: Message[], newUserText: string) {
-  const recentes = history.slice(-MAX_HISTORY);
+ASSUNTOS FORA DO ESCOPO:
+- Se o usuário pedir coisas que não tenham relação clara com ganhar dinheiro / negócios / investimentos / IA / apostas / cripto, responda curto dizendo que isso foge do foco do TalkGram.
+- Nunca dê indicação de remédio, diagnóstico médico ou orientação de saúde.
 
-  const linhas = recentes.map((m) =>
-    `${m.role === "user" ? "Usuário" : "Assistente"}: ${m.text}`
-  );
+SOBRE DOCUMENTAÇÃO E BUSCA NA WEB:
+- Você NÃO acessa documentos sozinho (PDF, relatórios, etc.), mas PODE analisar qualquer texto que o usuário colar no chat.
+- Você PODE usar a internet (Google Search) quando isso ajudar a responder perguntas de mercado, notícias, contexto atual ou dados mais recentes.
+- Quando o usuário pedir cotação de hoje, notícias recentes, mudanças recentes em um ativo, use a busca na web para tentar trazer informação atualizada.
+- Mesmo usando a web, lembre o usuário que:
+  - preços e cotações mudam o tempo todo,
+  - isso NÃO é recomendação personalizada de compra ou venda.
 
-  // adiciona a nova mensagem do usuário no final
-  linhas.push(`Usuário: ${newUserText}`);
+REGRAS DE ESTILO:
+- Fale sempre em português do Brasil.
+- Seja claro, direto e amigável.
+- Por padrão, responda de forma ENXUTA:
+  - máximo de 2 a 4 parágrafos curtos, ou até 8 tópicos em lista.
+- Só faça respostas longas/detalhadas quando o usuário pedir claramente algo como:
+  "explica em detalhes", "pode ser bem completo", "faz um guia completo".
+- Mesmo em respostas longas, tente organizar em seções, listas e passos.
 
-  // dica pro modelo responder em seguida:
-  linhas.push("Assistente:");
+IDENTIDADE:
+- Nunca diga que o TalkGram é uma rede social de voz.
+- Você é uma IA de conversa por texto, integrada ao ecossistema NeoGram, ajudando o usuário a:
+  - ganhar dinheiro,
+  - estruturar negócios,
+  - usar IA a seu favor,
+  - aproveitar BetGram, InvestGram, BusinessGram e CryptoGram.
+`;
 
-  return linhas.join("\n");
-}
-
-export default function TalkGramPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      text: "Olá! Sou o TalkGram, seu assistente de texto do ecossistema NeoGram. Como posso te ajudar hoje a ganhar dinheiro, estruturar seus negócios ou usar a inteligência artificial a seu favor?",
-    },
-  ]);
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSend = async (msg: string) => {
-    if (!msg.trim() || isLoading) return;
-
-    const userMsg: Message = { role: "user", text: msg };
-
-    // Atualiza a UI imediatamente
-    setMessages((prev) => [...prev, userMsg]);
-
-    // Monta o contexto (histórico + nova pergunta)
-    const contextForApi = buildConversationContext(
-      [...messages, userMsg],
-      msg
+export async function POST(req: NextRequest) {
+  if (!GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY não configurada");
+    return NextResponse.json(
+      { error: "Chave do Gemini não configurada no servidor." },
+      { status: 500 }
     );
+  }
 
-    setIsLoading(true);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "JSON inválido na requisição." },
+      { status: 400 }
+    );
+  }
 
-    try {
-      const res = await fetch("/api/talkgram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: contextForApi }),
-      });
+  const message = (body as { message?: string }).message;
 
-      if (!res.ok) {
-        throw new Error("Erro na API");
-      }
+  if (!message || typeof message !== "string") {
+    return NextResponse.json(
+      { error: "Campo 'message' é obrigatório." },
+      { status: 400 }
+    );
+  }
 
-      const data = await res.json();
-      const replyText: string =
-        data.reply || "Não consegui responder agora. Tente novamente.";
+  try {
+    // ⚠️ Usa v1beta porque o google_search está documentado aqui
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-      const aiMsg: Message = {
-        role: "assistant",
-        text: replyText,
-      };
+    // 🔗 Junta as regras fixas com a pergunta do usuário
+    const finalPrompt = `${SYSTEM_PROMPT}
 
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (error) {
-      console.error(error);
-      const errorMsg: Message = {
-        role: "assistant",
-        text: "Tive um problema ao falar com o Gemini. Tente novamente em alguns instantes.",
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
+-------------------------------
+Histórico e pergunta do usuário:
+${message}
+`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: finalPrompt }],
+          },
+        ],
+        // 🔍 Habilita busca na web (Google Search)
+        tools: [
+          {
+            google_search: {},
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      console.error("Erro na API Gemini:", response.status, errorData);
+
+      return NextResponse.json(
+        {
+          error: "Erro ao chamar o Gemini.",
+          details: errorData,
+        },
+        { status: 500 }
+      );
     }
-  };
 
-  // ====== ESTILOS ======
+    const data = await response.json();
 
-  const pageStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-    backgroundColor: "#0f1115",
-  };
+    const replyText: string =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((p: any) => p?.text ?? "")
+        .join("") || "Não consegui gerar uma resposta agora.";
 
-  const headerStyle: React.CSSProperties = {
-    padding: "14px 18px",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
-    backgroundColor: "#05080c",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  };
-
-  const headerInnerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-  };
-
-  const logoStyle: React.CSSProperties = {
-    width: 40,
-    height: 40,
-    borderRadius: "50%",
-    objectFit: "cover",
-  };
-
-  const titleWrapperStyle: React.CSSProperties = {
-    fontSize: 20,
-    fontWeight: 700,
-    display: "flex",
-    alignItems: "baseline",
-    gap: 4,
-  };
-
-  const subtitleStyle: React.CSSProperties = {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.75)",
-    textAlign: "center",
-  };
-
-  const mainStyle: React.CSSProperties = {
-    flex: 1,
-    overflowY: "auto",
-    padding: "16px",
-  };
-
-  // ====== RENDER ======
-  return (
-    <div style={pageStyle}>
-      <header style={headerStyle}>
-        <div style={headerInnerStyle}>
-          <img src="/talkgram-logo.png" alt="TalkGram" style={logoStyle} />
-
-          <div style={titleWrapperStyle}>
-            <span style={{ color: "#22c55e" }}>TalkGram -</span>
-            <span style={{ color: "#ffffff" }}>Assistente AI</span>
-          </div>
-        </div>
-
-        <div style={subtitleStyle}>
-          Plataforma de conversa com inteligência artificial do ecossistema NeoGram.
-        </div>
-      </header>
-
-      <main style={mainStyle}>
-        {messages.map((m, i) => (
-          <ChatMessage key={i} role={m.role} text={m.text} />
-        ))}
-
-        {isLoading && (
-          <ChatMessage
-            role="assistant"
-            text="Pensando na melhor resposta..."
-          />
-        )}
-      </main>
-
-      <ChatInput onSend={handleSend} />
-    </div>
-  );
+    return NextResponse.json({ reply: replyText });
+  } catch (err) {
+    console.error("Erro de rede ou inesperado ao chamar o Gemini:", err);
+    return NextResponse.json(
+      { error: "Falha de rede ao falar com o Gemini." },
+      { status: 500 }
+    );
+  }
 }
