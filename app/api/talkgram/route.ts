@@ -101,14 +101,14 @@ export async function POST(req: NextRequest) {
   // Monta o "contents" no formato da API do Gemini
   let contents: any[] = [];
 
-  // Primeiro, o system prompt como mensagem de usuário (contexto)
+  // 1) System prompt como primeira mensagem
   contents.push({
     role: "user",
     parts: [{ text: SYSTEM_PROMPT }],
   });
 
   if (history && Array.isArray(history) && history.length > 0) {
-    // Converte o histórico em mensagens user/model
+    // 2) Histórico da conversa
     const mapped = history.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.text }],
