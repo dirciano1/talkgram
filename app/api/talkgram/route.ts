@@ -1,120 +1,140 @@
-// app/api/talkgram/route.ts
-export const runtime = "nodejs"; // importante por causa do firebase-admin
+import { NextRequest, NextResponse } from "next/server";
 
-import { NextResponse } from "next/server";
-import { adminDb, admin } from "@/lib/firebaseServer";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+// Usa o modelo vindo da env ou, se não tiver, o padrão gemini-2.5-flash
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-type Mensagem = {
-  role: "user" | "assistant" | "system";
-  content: string;
-};
+// 🧠 Instrução fixa do TalkGram
+const SYSTEM_PROMPT = `
+Você é o TalkGram, um assistente de inteligência artificial de TEXTO, parte do ecossistema NeoGram.
 
-type BodyTalkgram = {
-  uid?: string;
-  mensagens?: Mensagem[];
-};
+ECOSSISTEMA NEOGRAM (SEUS LIMITES):
+- Você só conversa sobre assuntos ligados ao ecossistema NeoGram e ganhar dinheiro / construir renda:
+  - NeoGram: visão geral do ecossistema, IA, automação, estratégias gerais.
+  - BetGram: apostas esportivas com IA, análise de jogos, gestão de banca, valor esperado, estratégias de apostas.
+  - InvestGram: investimentos, renda passiva/ativa, educação financeira, estratégias de investimento responsáveis.
+  - BusinessGram: negócios digitais, marketing, vendas, automação, produtividade, escala de empresas.
+  - CryptoGram: criptomoedas, blockchain, renda com cripto, segurança básica, oportunidades e riscos.
+  - O próprio TalkGram: como usar, ideias de prompts, como tirar mais proveito da IA para ganhar dinheiro.
 
-export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as BodyTalkgram;
-    const { uid, mensagens } = body;
+- Você pode falar de:
+  - negócios na internet,
+  - criação de produtos e serviços,
+  - como lucrar com IA,
+  - estratégias para vender mais,
+  - ideias de conteúdo e posicionamento,
+  - gestão financeira básica ligada a lucro e negócios,
+  - ferramentas e fluxos que possam ser automatizados pelo ecossistema NeoGram.
 
-    if (!uid) {
-      return NextResponse.json(
-        { error: "UID do usuário é obrigatório." },
-        { status: 400 }
-      );
-    }
+ASSUNTOS QUE VOCÊ NÃO RESPONDE:
+- Se o usuário pedir coisas fora desse nicho (exemplos):
+  - remédios, tratamentos, diagnósticos, saúde física ou mental;
+  - conselhos de relacionamento pessoal (amoroso, familiar, etc.) sem relação com negócio;
+  - religião, política, fofoca, celebridades, entretenimento aleatório;
+  - temas que não tenham ligação clara com: ganhar dinheiro, negócios, investimentos, IA, apostas, cripto.
+- Nesses casos, responda de forma curta, por exemplo:
+  - "Meu foco é apenas em negócios, apostas, investimentos, cripto e o ecossistema NeoGram. Esse assunto foge do meu escopo."
+  - Nunca tente dar recomendações médicas, indicar remédios ou fazer diagnóstico.
 
-    if (!mensagens || !Array.isArray(mensagens) || mensagens.length === 0) {
-      return NextResponse.json(
-        { error: "Envie o array de mensagens para o TalkGram." },
-        { status: 400 }
-      );
-    }
+REGRAS DE ESTILO:
+- Fale sempre em português do Brasil.
+- Seja claro, direto e amigável.
+- Por padrão, responda de forma ENXUTA:
+  - máximo de 2 a 4 parágrafos curtos, ou até 8 tópicos em lista.
+- Só faça respostas longas/detalhadas quando o usuário pedir claramente algo como:
+  "explica em detalhes", "pode ser bem completo", "faz um guia completo".
+- Mesmo em respostas longas, tente organizar em seções, listas e passos.
 
-    // 1) BUSCA / CRIA USUÁRIO
-    const userRef = adminDb.collection("usuarios").doc(uid);
-    const userSnap = await userRef.get();
-
-    let dadosUser: any;
-
-    if (!userSnap.exists) {
-      dadosUser = {
-        uid,
-        creditos: 10, // crédito inicial
-        criadoEm: admin.firestore.FieldValue.serverTimestamp(),
-        origem: "talkgram",
-      };
-      await userRef.set(dadosUser);
-    } else {
-      dadosUser = userSnap.data();
-    }
-
-    let creditosAtuais = Number(dadosUser?.creditos ?? 0);
-
-    // 2) VERIFICA CRÉDITOS
-    if (creditosAtuais <= 0) {
-      return NextResponse.json(
-        {
-          error: "Você não tem créditos suficientes para conversar no TalkGram.",
-          creditos: creditosAtuais,
-        },
-        { status: 403 }
-      );
-    }
-
-    // 3) MONTA PROMPT
-    const historicoTexto = mensagens
-      .map((m) => {
-        const prefixo =
-          m.role === "user"
-            ? "Usuário:"
-            : m.role === "assistant"
-            ? "Assistente:"
-            : "Sistema:";
-        return `${prefixo} ${m.content}`;
-      })
-      .join("\n\n");
-
-    const sistema = `
-Você é o TalkGram, assistente de texto do ecossistema NeoGram.
-Foque em:
-- negócios, renda, marketing, produtividade
-- apostas esportivas, investimentos, criptomoedas
-Responda SEMPRE em português do Brasil, de forma direta e prática.
+IDENTIDADE:
+- Nunca diga que o TalkGram é uma rede social de voz.
+- Você é uma IA de conversa por texto, integrada ao ecossistema NeoGram, ajudando o usuário a:
+  - ganhar dinheiro,
+  - estruturar negócios,
+  - usar IA a seu favor,
+  - aproveitar BetGram, InvestGram, BusinessGram e CryptoGram.
 `;
 
-    const promptFinal = `${sistema}\n\nHistórico de conversa:\n${historicoTexto}\n\nResponda a última mensagem do usuário da forma mais útil possível.`;
+// ==========================
 
-    const result = await model.generateContent(promptFinal);
-    const respostaIA = result.response.text();
-
-    // 4) DEBITA 1 CRÉDITO
-    creditosAtuais = creditosAtuais - 1;
-
-    await userRef.update({
-      creditos: creditosAtuais,
-      ultimaInteracaoTalkgram: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // 5) RETORNA PRO FRONT
-    return NextResponse.json({
-      resposta: respostaIA,
-      creditos: creditosAtuais,
-    });
-  } catch (error: any) {
-    console.error("Erro na rota /api/talkgram:", error);
-
+export async function POST(req: NextRequest) {
+  if (!GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY não configurada");
     return NextResponse.json(
-      {
-        error: "Erro interno ao processar a conversa no TalkGram.",
-        detalhe: error?.message ?? String(error),
+      { error: "Chave do Gemini não configurada no servidor." },
+      { status: 500 }
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "JSON inválido na requisição." },
+      { status: 400 }
+    );
+  }
+
+  const message = (body as { message?: string }).message;
+
+  if (!message || typeof message !== "string") {
+    return NextResponse.json(
+      { error: "Campo 'message' é obrigatório." },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // 👇 API v1 com o modelo configurável (gemini-2.5-flash)
+    const url = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        // 🧠 Persona fixa do TalkGram
+        systemInstruction: {
+          role: "system",
+          parts: [{ text: SYSTEM_PROMPT }],
+        },
+        // 💬 Mensagem do usuário
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: message }],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      console.error("Erro na API Gemini:", response.status, errorData);
+
+      return NextResponse.json(
+        {
+          error: "Erro ao chamar o Gemini.",
+          details: errorData,
+        },
+        { status: 500 }
+      );
+    }
+
+    const data = await response.json();
+
+    const replyText: string =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((p: any) => p?.text ?? "")
+        .join("") || "Não consegui gerar uma resposta agora.";
+
+    return NextResponse.json({ reply: replyText });
+  } catch (err) {
+    console.error("Erro de rede ou inesperado ao chamar o Gemini:", err);
+    return NextResponse.json(
+      { error: "Falha de rede ao falar com o Gemini." },
       { status: 500 }
     );
   }
