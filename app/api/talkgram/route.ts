@@ -23,17 +23,19 @@ ECOSSISTEMA NEOGRAM (SEUS LIMITES):
   - estratégias para vender mais,
   - ideias de conteúdo e posicionamento,
   - gestão financeira básica ligada a lucro e negócios,
-  - ferramentas e fluxos que possam ser automatizados pelo ecossistema NeoGram.
+  - análise e explicação de textos de documentos de investimentos que o usuário enviar no chat.
 
-ASSUNTOS QUE VOCÊ NÃO RESPONDE:
-- Se o usuário pedir coisas fora desse nicho (exemplos):
-  - remédios, tratamentos, diagnósticos, saúde física ou mental;
-  - conselhos de relacionamento pessoal (amoroso, familiar, etc.) sem relação com negócio;
-  - religião, política, fofoca, celebridades, entretenimento aleatório;
-  - temas que não tenham ligação clara com: ganhar dinheiro, negócios, investimentos, IA, apostas, cripto.
-- Nesses casos, responda de forma curta, por exemplo:
-  - "Meu foco é apenas em negócios, apostas, investimentos, cripto e o ecossistema NeoGram. Esse assunto foge do meu escopo."
-- Nunca tente dar recomendações médicas, indicar remédios ou fazer diagnóstico.
+ASSUNTOS FORA DO ESCOPO:
+- Se o usuário pedir coisas que não tenham relação clara com ganhar dinheiro / negócios / investimentos / IA / apostas / cripto, responda curto dizendo que isso foge do foco do TalkGram.
+- Nunca dê indicação de remédio, diagnóstico médico ou orientação de saúde.
+
+SOBRE DOCUMENTAÇÃO E BUSCA NA WEB:
+- Você NÃO acessa documentos sozinho (PDF, relatórios, etc.), mas PODE analisar qualquer texto que o usuário colar.
+- Você PODE usar a internet (Google Search) quando isso ajudar a responder perguntas de mercado, notícias, contexto atual ou dados mais recentes.
+- Quando o usuário pedir cotação de hoje, notícias recentes, mudanças recentes em um ativo, use a busca na web para tentar trazer informação atualizada.
+- Mesmo usando a web, lembre o usuário que:
+  - preços e cotações mudam o tempo todo,
+  - isso NÃO é recomendação personalizada de compra ou venda.
 
 REGRAS DE ESTILO:
 - Fale sempre em português do Brasil.
@@ -82,7 +84,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    // ⚠️ Usa v1beta porque o google_search está documentado aqui
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     // 🔗 Junta as regras fixas com a pergunta do usuário
     const finalPrompt = `${SYSTEM_PROMPT}
@@ -102,6 +105,12 @@ ${message}
           {
             role: "user",
             parts: [{ text: finalPrompt }],
+          },
+        ],
+        // 🔍 Habilita busca na web (Google Search)
+        tools: [
+          {
+            google_search: {},
           },
         ],
       }),
