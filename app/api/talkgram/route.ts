@@ -37,6 +37,20 @@ SOBRE DOCUMENTAÇÃO E BUSCA NA WEB:
   - preços e cotações mudam o tempo todo,
   - isso NÃO é recomendação personalizada de compra ou venda.
 
+SOBRE REFERÊNCIAS COMO "ELE", "DELE", "ESSE FUNDO":
+- Você sempre recebe o histórico recente da conversa junto com a pergunta atual.
+- Use esse histórico para descobrir se o usuário está falando de um ATIVO específico (por exemplo: "MXRF11", "PETR4", "VALE3", etc.).
+- Se em mensagens anteriores o usuário mencionou um ativo e depois perguntar coisas como:
+  - "e o pvp dele?"
+  - "qual o dy dele?"
+  - "e a liquidez dele?"
+  - "você acha que vale a pena comprar ele?"
+  então ASSUMA que "ele/dele" se refere ao MESMO ATIVO citado antes.
+- Nesses casos, dê preferência a respostas específicas ligadas ao ativo em foco. Você pode:
+  1) Deixar claro sobre qual ativo está falando ("No caso do FII MXRF11...").
+  2) Tentar usar a web para trazer o dado aproximado.
+  3) Se não encontrar, avise que não encontrou o valor exato e então explique o conceito de forma geral.
+
 REGRAS DE ESTILO:
 - Fale sempre em português do Brasil.
 - Seja claro, direto e amigável.
@@ -59,12 +73,12 @@ export async function POST(req: NextRequest) {
   if (!GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY não configurada");
     return NextResponse.json(
-      { error: "Chave do Gemini não configurada no servidor." },
+      { error: "Chave do Gemini não configurada" },
       { status: 500 }
     );
   }
 
-  let body: unknown;
+  let body: any;
   try {
     body = await req.json();
   } catch {
@@ -74,26 +88,44 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const message = (body as { message?: string }).message;
+  const history = body.history as { role: "user" | "assistant"; text: string }[] | undefined;
+  const singleMessage = body.message as string | undefined;
 
-  if (!message || typeof message !== "string") {
+  if ((!history || !Array.isArray(history) || history.length === 0) && !singleMessage) {
     return NextResponse.json(
-      { error: "Campo 'message' é obrigatório." },
+      { error: "É necessário enviar 'history' ou 'message'." },
       { status: 400 }
     );
   }
 
+  // Monta o "contents" no formato da API do Gemini
+  let contents: any[] = [];
+
+  // Primeiro, o system prompt como mensagem de usuário (contexto)
+  contents.push({
+    role: "user",
+    parts: [{ text: SYSTEM_PROMPT }],
+  });
+
+  if (history && Array.isArray(history) && history.length > 0) {
+    // Converte o histórico em mensagens user/model
+    const mapped = history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.text }],
+    }));
+
+    contents = contents.concat(mapped);
+  } else if (singleMessage) {
+    // Fallback: só uma mensagem simples
+    contents.push({
+      role: "user",
+      parts: [{ text: singleMessage }],
+    });
+  }
+
   try {
-    // ⚠️ Usa v1beta porque o google_search está documentado aqui
+    // Usa v1beta porque estamos usando tools.google_search
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-    // 🔗 Junta as regras fixas com a pergunta do usuário
-    const finalPrompt = `${SYSTEM_PROMPT}
-
--------------------------------
-Histórico e pergunta do usuário:
-${message}
-`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -101,13 +133,7 @@ ${message}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: finalPrompt }],
-          },
-        ],
-        // 🔍 Habilita busca na web (Google Search)
+        contents,
         tools: [
           {
             google_search: {},
@@ -138,7 +164,7 @@ ${message}
 
     return NextResponse.json({ reply: replyText });
   } catch (err) {
-    console.error("Erro de rede ou inesperado ao chamar o Gemini:", err);
+    console.error("Erro de rede ou inesperado ao falar com o Gemini:", err);
     return NextResponse.json(
       { error: "Falha de rede ao falar com o Gemini." },
       { status: 500 }
