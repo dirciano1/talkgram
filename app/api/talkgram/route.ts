@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-// Usa o modelo vindo da env ou, se não tiver, o padrão gemini-2.5-flash
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 // 🧠 Instrução fixa do TalkGram
@@ -35,7 +33,7 @@ ASSUNTOS QUE VOCÊ NÃO RESPONDE:
   - temas que não tenham ligação clara com: ganhar dinheiro, negócios, investimentos, IA, apostas, cripto.
 - Nesses casos, responda de forma curta, por exemplo:
   - "Meu foco é apenas em negócios, apostas, investimentos, cripto e o ecossistema NeoGram. Esse assunto foge do meu escopo."
-  - Nunca tente dar recomendações médicas, indicar remédios ou fazer diagnóstico.
+- Nunca tente dar recomendações médicas, indicar remédios ou fazer diagnóstico.
 
 REGRAS DE ESTILO:
 - Fale sempre em português do Brasil.
@@ -54,8 +52,6 @@ IDENTIDADE:
   - usar IA a seu favor,
   - aproveitar BetGram, InvestGram, BusinessGram e CryptoGram.
 `;
-
-// ==========================
 
 export async function POST(req: NextRequest) {
   if (!GEMINI_API_KEY) {
@@ -86,8 +82,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 👇 API v1 com o modelo configurável (gemini-2.5-flash)
     const url = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+    // 🔗 Junta as regras fixas com a pergunta do usuário
+    const finalPrompt = `${SYSTEM_PROMPT}
+
+-------------------------------
+Pergunta do usuário:
+${message}
+`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -95,16 +98,10 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // 🧠 Persona fixa do TalkGram
-        systemInstruction: {
-          role: "system",
-          parts: [{ text: SYSTEM_PROMPT }],
-        },
-        // 💬 Mensagem do usuário
         contents: [
           {
             role: "user",
-            parts: [{ text: message }],
+            parts: [{ text: finalPrompt }],
           },
         ],
       }),
