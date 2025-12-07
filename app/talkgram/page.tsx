@@ -9,6 +9,11 @@ import {
   onAuthStateChanged,
   loginComGoogle,
   sair,
+  db,
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
 } from "@/lib/firebase";
 
 import { getCreditos } from "@/utils/getCreditos";
@@ -43,13 +48,31 @@ export default function TalkGramPage() {
   const [hasActiveChat, setHasActiveChat] = useState(false);
   const [showNovaConversaModal, setShowNovaConversaModal] = useState(false);
 
-  // ====== EFFECT: AUTH STATE ======
+  // ====== AUTH LISTENER ======
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        const c = await getCreditos(firebaseUser.uid);
-        setCreditos(c);
+
+        // 🔥 BUSCA CRÉDITOS NO FIRESTORE
+        const ref = doc(db, "users", firebaseUser.uid);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          // 🎁 CRIA USUÁRIO COM 10 CONVERSAS GRÁTIS
+          await setDoc(ref, {
+            uid: firebaseUser.uid,
+            nome: firebaseUser.displayName || "Usuário",
+            email: firebaseUser.email || "",
+            creditos: 10,
+            criadoEm: serverTimestamp(),
+            jaComprou: false,
+          });
+
+          setCreditos(10);
+        } else {
+          setCreditos(snap.data().creditos ?? 0);
+        }
       } else {
         setUser(null);
         setCreditos(0);
@@ -61,7 +84,7 @@ export default function TalkGramPage() {
     return () => unsub();
   }, []);
 
-  // ====== EFFECT: COOLDOWN ======
+  // ====== COOLDOWN ======
   useEffect(() => {
     if (cooldown <= 0) return;
 
@@ -78,13 +101,31 @@ export default function TalkGramPage() {
     return () => clearInterval(intervalId);
   }, [cooldown]);
 
-  // ====== LOGIN ======
+  // ======================
+  // LOGIN
+  // ======================
   async function handleLogin() {
     try {
       const u = await loginComGoogle();
       setUser(u);
-      const c = await getCreditos(u.uid);
-      setCreditos(c);
+
+      const ref = doc(db, "users", u.uid);
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) {
+        // 🎁 PRIMEIRA VEZ → dá 10 conversas grátis
+        await setDoc(ref, {
+          uid: u.uid,
+          nome: u.displayName || "Usuário",
+          email: u.email || "",
+          creditos: 10,
+          criadoEm: serverTimestamp(),
+          jaComprou: false,
+        });
+        setCreditos(10);
+      } else {
+        setCreditos(snap.data().creditos ?? 0);
+      }
     } catch (err: any) {
       alert("Erro ao fazer login: " + err.message);
     }
@@ -98,7 +139,9 @@ export default function TalkGramPage() {
     setHasActiveChat(false);
   }
 
-  // ====== ENVIO DE MENSAGEM ======
+  // ======================
+  // ENVIO DE MENSAGEM
+  // ======================
   const handleSend = async (msg: string) => {
     if (!msg.trim() || isLoading || cooldown > 0 || !hasActiveChat) return;
 
@@ -130,11 +173,7 @@ export default function TalkGramPage() {
       console.error(error);
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          text:
-            "Tive um problema para responder. Tente novamente em alguns instantes.",
-        },
+        { role: "assistant", text: "Erro ao responder. Tente novamente." },
       ]);
     } finally {
       setIsLoading(false);
@@ -142,6 +181,9 @@ export default function TalkGramPage() {
     }
   };
 
+  // ======================
+  // ENVIO VIA ENTER
+  // ======================
   const handleSubmit = () => {
     if (!hasActiveChat || isLoading || cooldown > 0) return;
     const texto = inputValue.trim();
@@ -157,17 +199,13 @@ export default function TalkGramPage() {
     }
   };
 
-  // ====== NOVA CONVERSA ======
-  const handleNovaConversa = () => {
-    setShowNovaConversaModal(true);
-  };
+  // ======================
+  // NOVA CONVERSA
+  // ======================
+  const handleNovaConversa = () => setShowNovaConversaModal(true);
 
   const handleConfirmNovaConversa = async () => {
-    if (!user) {
-      alert("Você precisa estar logado para iniciar uma conversa.");
-      setShowNovaConversaModal(false);
-      return;
-    }
+    if (!user) return alert("Faça login.");
 
     if (creditos <= 0) {
       alert("Você não tem créditos suficientes.");
@@ -175,12 +213,11 @@ export default function TalkGramPage() {
       return;
     }
 
-    // debitar crédito
     await descontarCredito(user.uid);
+
     const novoSaldo = await getCreditos(user.uid);
     setCreditos(novoSaldo);
 
-    // inicia nova conversa
     setMessages([INITIAL_ASSISTANT_MESSAGE]);
     setInputValue("");
     setCooldown(0);
@@ -188,13 +225,13 @@ export default function TalkGramPage() {
     setShowNovaConversaModal(false);
   };
 
-  const handleCancelNovaConversa = () => {
+  const handleCancelNovaConversa = () =>
     setShowNovaConversaModal(false);
-  };
 
-  // ================================
+  // ======================
   // ESTILOS
-  // ================================
+  // ======================
+
   const mainLoginStyle: React.CSSProperties = {
     display: "flex",
     justifyContent: "center",
@@ -202,7 +239,6 @@ export default function TalkGramPage() {
     height: "100vh",
     background: "linear-gradient(135deg,#0b1324 0%,#111827 100%)",
     color: "#fff",
-    fontFamily: "Inter, sans-serif",
     padding: "20px",
   };
 
@@ -221,7 +257,6 @@ export default function TalkGramPage() {
     minHeight: "100vh",
     background: "linear-gradient(135deg,#0b1324,#111827)",
     color: "#fff",
-    fontFamily: "Inter, sans-serif",
     padding: "0 20px 16px",
     display: "flex",
     flexDirection: "column",
@@ -252,181 +287,76 @@ export default function TalkGramPage() {
     borderRadius: "16px",
     boxShadow: "0 0 25px rgba(34,197,94,0.08)",
     padding: "10px",
-    backdropFilter: "blur(8px)",
+    height: "80vh",
     display: "flex",
     flexDirection: "column",
-    height: "80vh",
-    maxHeight: "80vh",
   };
 
-  const headerTopRowStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-  };
-
-  const creditBadgeStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    background: "rgba(17,24,39,0.6)",
-    borderRadius: "8px",
-    padding: "4px 10px",
-    border: "1px solid rgba(34,197,94,0.3)",
-    boxShadow: "0 0 8px rgba(34,197,94,0.2)",
-  };
-
-  const sairButtonStyle: React.CSSProperties = {
+  const sairButtonStyle = {
     background: "rgba(239,68,68,0.15)",
     border: "1px solid #ef444455",
-    borderRadius: "8px",
-    padding: "8px 14px",
     color: "#f87171",
-    fontWeight: 600,
+    padding: "8px 14px",
+    borderRadius: "8px",
     cursor: "pointer",
     marginTop: "10px",
     width: "100%",
   };
 
-  const menuButtonsRowStyle: React.CSSProperties = {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "10px",
-    marginTop: "12px",
-    justifyContent: "center",
-  };
-
-  const baseMenuButtonStyle: React.CSSProperties = {
-    flex: "1 1 48%",
+  const addCreditosButtonStyle = {
+    flex: "1",
     minWidth: "140px",
+    background: "rgba(34,197,94,0.15)",
+    border: "1px solid #22c55e55",
     borderRadius: "8px",
     padding: "8px",
+    color: "#22c55e",
     fontWeight: 600,
     cursor: "pointer",
-    border: "1px solid transparent",
   };
 
-  const novaConversaButtonStyle: React.CSSProperties = {
-    ...baseMenuButtonStyle,
-    background: "rgba(14,165,233,0.15)",
-    borderColor: "#0ea5e955",
-    color: "#38bdf8",
-  };
-
-  const addCreditosButtonStyle: React.CSSProperties = {
-    ...baseMenuButtonStyle,
-    background: "rgba(34,197,94,0.15)",
-    borderColor: "#22c55e55",
-    color: "#22c55e",
-  };
-
-  const dividerStyle: React.CSSProperties = {
-    width: "100%",
-    height: "1px",
-    marginTop: "14px",
-    marginBottom: "8px",
-    background:
-      "linear-gradient(90deg, rgba(15,23,42,0), rgba(55,65,81,0.9), rgba(15,23,42,0))",
-  };
-
-  const chatWrapperStyle: React.CSSProperties = {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    borderRadius: "12px",
-    background: "rgba(15,23,42,0.7)",
-    border: "1px solid rgba(15,23,42,0.9)",
-    padding: "10px",
-    minHeight: 0,
-  };
-
-  const messagesAreaStyle: React.CSSProperties = {
-    flex: 1,
-    overflowY: "auto",
-    paddingRight: "4px",
-    marginBottom: "8px",
-    minHeight: 0,
-  };
-
-  const emptyMessageStyle: React.CSSProperties = {
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    textAlign: "center",
-    color: "#9ca3af",
-    fontSize: "0.9rem",
-  };
-
-  const inputAreaStyle: React.CSSProperties = {
-    marginTop: "4px",
-  };
-
-  const inputRowStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  };
-
-  const textInputStyle: React.CSSProperties = {
-    flex: 1,
-    background: "#020617",
-    borderRadius: "999px",
-    border: "1px solid rgba(148,163,184,0.6)",
-    padding: "10px 16px",
-    color: "#e5e7eb",
-    outline: "none",
-    fontSize: "0.95rem",
-  };
-
-  const sendButtonStyle: React.CSSProperties = {
-    borderRadius: "999px",
-    border: "none",
-    padding: "10px 20px",
-    background: "linear-gradient(90deg,#22c55e,#16a34a)",
-    color: "#fff",
-    fontWeight: 700,
-    fontSize: "0.95rem",
-    cursor:
-      isLoading || cooldown > 0 || !hasActiveChat ? "not-allowed" : "pointer",
-    opacity: isLoading || cooldown > 0 || !hasActiveChat ? 0.8 : 1,
-  };
-
-  // ================================
-  // RENDER
-  // ================================
-
-  // ❌ TELA DE LOGIN
+  // ===================================
+  // LOGIN SCREEN
+  // ===================================
   if (!user) {
     return (
       <main style={mainLoginStyle}>
         <div style={loginCardStyle}>
+
           <h2
-            aria-hidden="true"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
+              gap: "10px",
               justifyContent: "center",
-              fontSize: "1.4rem",
-              marginBottom: "8px",
+              fontSize: "1.5rem",
             }}
           >
-            <img
-              src="/talkgram-logo.png"
-              alt="Logo TalkGram"
-              style={{ width: "46px", height: "46px", objectFit: "contain" }}
-            />
-            <span style={{ color: "#fff" }}>
+            <img src="/talkgram-logo.png" style={logoStyle} />
+            <span>
               Bem-vindo ao <span style={{ color: "#22c55e" }}>TalkGram</span>
             </span>
           </h2>
 
           <p style={{ color: "#ccc" }}>
-            Converse com uma IA focada em negócios, estratégia e dinheiro.
+            Converse com uma IA treinada para negócios, dinheiro e estratégias.
           </p>
+
+          {/* 🎁 10 CONVERSAS GRÁTIS */}
+          <div
+            style={{
+              background:
+                "linear-gradient(90deg,rgba(34,197,94,0.2),rgba(34,197,94,0.05))",
+              border: "1px solid #22c55e55",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              margin: "20px 0",
+              color: "#a7f3d0",
+            }}
+          >
+            🎁 <b style={{ color: "#22c55e" }}>Ganhe 10 conversas grátis</b> ao
+            criar sua conta
+          </div>
 
           <button
             onClick={handleLogin}
@@ -434,22 +364,20 @@ export default function TalkGramPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "10px",
+              gap: "12px",
               background: "#fff",
               color: "#000",
-              border: "none",
-              borderRadius: "50px",
               padding: "14px 28px",
               fontWeight: 600,
+              borderRadius: "50px",
+              border: "none",
               cursor: "pointer",
               width: "100%",
-              marginTop: "20px",
             }}
           >
             <img
               src="https://www.svgrepo.com/show/355037/google.svg"
-              alt="Google"
-              style={{ width: "22px", height: "22px" }}
+              width={22}
             />
             Entrar com Google
           </button>
@@ -458,231 +386,203 @@ export default function TalkGramPage() {
     );
   }
 
-  // ============================
-  // DASHBOARD TALKGRAM
-  // ============================
-  const userName = user?.displayName?.split(" ")[0] || "Usuário";
+  // ===================================
+  // DASHBOARD
+  // ===================================
+  const userName = user.displayName?.split(" ")[0] || "Usuário";
 
   return (
     <>
       <main style={mainStyle}>
         <h2 style={titleStyle}>
-          <img src="/talkgram-logo.png" alt="Logo" style={logoStyle} />
+          <img src="/talkgram-logo.png" style={logoStyle} />
           <span style={{ color: "#22c55e" }}>
-            TalkGram -<span style={{ color: "#fff" }}> IA Financeira</span>
+            TalkGram - <span style={{ color: "#fff" }}>IA Financeira</span>
           </span>
         </h2>
 
         <div style={cardWrapperStyle}>
-          {/* Topo do painel */}
-          <div style={{ marginBottom: "8px" }}>
-            <div style={headerTopRowStyle}>
-              <div style={{ fontSize: "1.1rem" }}>
-                👋 Olá, <b>{userName}</b>
-              </div>
-              <div style={creditBadgeStyle}>
-                💰{" "}
-                <span
-                  style={{
-                    color: "#22c55e",
-                    fontWeight: 600,
-                    fontSize: "1rem",
-                  }}
-                >
-                  {creditos}
-                </span>
+          {/* HEADER */}
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "10px",
+              }}
+            >
+              <div>👋 Olá, <b>{userName}</b></div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "rgba(17,24,39,0.6)",
+                  padding: "4px 10px",
+                  borderRadius: "8px",
+                }}
+              >
+                💰 <span style={{ color: "#22c55e", fontWeight: 600 }}>{creditos}</span>
               </div>
             </div>
 
-            <button type="button" onClick={handleLogout} style={sairButtonStyle}>
-              🚪 Sair
-            </button>
+            <button style={sairButtonStyle} onClick={handleLogout}>🚪 Sair</button>
 
-            {/* BOTÕES MENU */}
-            <div style={menuButtonsRowStyle}>
+            <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
               <button
-                type="button"
-                style={novaConversaButtonStyle}
                 onClick={handleNovaConversa}
+                style={{
+                  flex: 1,
+                  background: "rgba(14,165,233,0.15)",
+                  border: "1px solid #0ea5e955",
+                  borderRadius: "8px",
+                  padding: "8px",
+                  color: "#38bdf8",
+                  fontWeight: 600,
+                }}
               >
                 🆕 Nova conversa
               </button>
 
               <button
-  type="button"
-  style={addCreditosButtonStyle}
-  onClick={() => {
-    if (!user) {
-      alert("Faça login primeiro.");
-      return;
-    }
-
-    const url = `https://dirciano1.github.io/neogram/payments?uid=${user.uid}`;
-    window.open(url, "_blank");
-  }}
->
-  ➕ Adicionar Créditos
-</button>
+                style={addCreditosButtonStyle}
+                onClick={() => {
+                  const url = `https://dirciano1.github.io/neogram/payments?uid=${user.uid}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                ➕ Adicionar Créditos
+              </button>
             </div>
           </div>
 
-          {/* SEPARADOR */}
-          <div style={dividerStyle} />
+          {/* CHAT AREA */}
+          <div
+            style={{
+              flex: 1,
+              marginTop: "14px",
+              background: "rgba(15,23,42,0.7)",
+              borderRadius: "12px",
+              padding: "12px",
+              overflowY: "auto",
+            }}
+          >
+            {hasActiveChat && messages.length > 0 ? (
+              <>
+                {messages.map((m, i) => (
+                  <ChatMessage key={i} role={m.role} text={m.text} />
+                ))}
 
-          {/* CHAT */}
-          <div style={chatWrapperStyle}>
-            <div style={messagesAreaStyle} className="talkgram-scroll">
-              {hasActiveChat && messages.length > 0 ? (
-                <>
-                  {messages.map((m, i) => (
-                    <ChatMessage key={i} role={m.role} text={m.text} />
-                  ))}
-
-                  {isLoading && (
-                    <ChatMessage
-                      role="assistant"
-                      text="Pensando na melhor resposta..."
-                    />
-                  )}
-                </>
-              ) : (
-                <div style={emptyMessageStyle}>
-                  <p>
-                    Clique em{" "}
-                    <span
-                      style={{ color: "#22c55e", fontWeight: 600 }}
-                    >
-                      Nova conversa
-                    </span>{" "}
-                    para iniciar.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* INPUT */}
-            <div style={inputAreaStyle}>
-              <div style={inputRowStyle}>
-                <input
-                  type="text"
-                  placeholder={
-                    hasActiveChat
-                      ? "Digite sua mensagem..."
-                      : "Clique em Nova conversa para começar"
-                  }
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  style={textInputStyle}
-                  disabled={isLoading || !hasActiveChat}
-                />
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  style={sendButtonStyle}
-                  disabled={
-                    isLoading ||
-                    cooldown > 0 ||
-                    !hasActiveChat ||
-                    !inputValue.trim()
-                  }
-                >
-                  {isLoading
-                    ? "Gerando..."
-                    : cooldown > 0
-                    ? `Aguarde ${cooldown}s`
-                    : "Enviar"}
-                </button>
+                {isLoading && (
+                  <ChatMessage
+                    role="assistant"
+                    text="Pensando na melhor resposta..."
+                  />
+                )}
+              </>
+            ) : (
+              <div style={{ textAlign: "center", marginTop: "20px", color: "#aaa" }}>
+                Clique em <b style={{ color: "#22c55e" }}>Nova conversa</b> para iniciar.
               </div>
+            )}
+          </div>
+
+          {/* INPUT */}
+          <div style={{ marginTop: "10px" }}>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <input
+                type="text"
+                placeholder={
+                  hasActiveChat
+                    ? "Digite sua mensagem..."
+                    : "Clique em Nova conversa para começar"
+                }
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={!hasActiveChat || isLoading}
+                style={{
+                  flex: 1,
+                  background: "#020617",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(148,163,184,0.6)",
+                  padding: "12px 16px",
+                  color: "#e5e7eb",
+                  fontSize: "0.95rem",
+                }}
+              />
+
+              <button
+                onClick={handleSubmit}
+                disabled={!hasActiveChat || isLoading || cooldown > 0}
+                style={{
+                  background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                  padding: "12px 20px",
+                  borderRadius: "999px",
+                  color: "#fff",
+                  fontWeight: 700,
+                  opacity: !hasActiveChat || cooldown > 0 ? 0.7 : 1,
+                }}
+              >
+                {isLoading
+                  ? "Gerando..."
+                  : cooldown > 0
+                  ? `Aguarde ${cooldown}s`
+                  : "Enviar"}
+              </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* ===== MODAL - NOVA CONVERSA ===== */}
+      {/* MODAL NOVA CONVERSA */}
       {showNovaConversaModal && (
         <div
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(0,0,0,0.65)",
+            background: "rgba(0,0,0,0.65)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 50,
           }}
         >
           <div
             style={{
               background: "#020617",
+              padding: "20px",
               borderRadius: "16px",
               border: "1px solid rgba(34,197,94,0.6)",
-              padding: "18px 16px",
               width: "100%",
               maxWidth: "360px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.75)",
             }}
           >
-            <h3
-              style={{
-                margin: 0,
-                marginBottom: "10px",
-                fontSize: "1.05rem",
-                fontWeight: 700,
-              }}
-            >
-              Iniciar nova conversa?
-            </h3>
-            <p
-              style={{
-                margin: 0,
-                marginBottom: "12px",
-                fontSize: "0.9rem",
-                color: "#e5e7eb",
-              }}
-            >
-              Esta nova conversa irá consumir{" "}
-              <span style={{ color: "#22c55e", fontWeight: 600 }}>
-                1 crédito
-              </span>
-              . Deseja continuar?
+            <h3>Iniciar nova conversa?</h3>
+            <p style={{ color: "#ddd" }}>
+              Isso consumirá{" "}
+              <span style={{ color: "#22c55e" }}>1 crédito</span>.
             </p>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "10px",
-                marginTop: "4px",
-              }}
-            >
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button
-                type="button"
                 onClick={handleCancelNovaConversa}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "999px",
-                  border: "1px solid rgba(148,163,184,0.5)",
-                  background: "transparent",
-                  color: "#e5e7eb",
-                  fontSize: "0.85rem",
-                  cursor: "pointer",
+                  border: "1px solid #555",
                 }}
               >
                 Cancelar
               </button>
               <button
-                type="button"
                 onClick={handleConfirmNovaConversa}
                 style={{
                   padding: "6px 16px",
                   borderRadius: "999px",
-                  border: "none",
                   background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                  border: "none",
                   color: "#fff",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                  cursor: "pointer",
                 }}
               >
                 Confirmar
