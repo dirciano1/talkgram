@@ -153,7 +153,7 @@ export default function TalkGramPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/ttalkgram", {
+      const res = await fetch("/api/talkgram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history: historyToSend }),
