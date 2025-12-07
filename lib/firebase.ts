@@ -1,18 +1,152 @@
-// lib/firebase.ts
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+// lib/firebase.js
+import { initializeApp } from "firebase/app";
 
+import {
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  serverTimestamp,
+  increment,
+  deleteDoc,
+} from "firebase/firestore";
+
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+
+
+// ================= CONFIG FIREBASE ==================
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Evita inicializar 2x no Next
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Inicializa Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
 
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
+
+// ================= LOGIN COM GOOGLE =================
+async function loginComGoogle() {
+  const result = await signInWithPopup(auth, provider);
+  const user = result.user;
+
+  // pega token JWT
+  const token = await user.getIdToken();
+  document.cookie = `betgram_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+
+  const ref = doc(db, "users", user.uid);
+  const snap = await getDoc(ref);
+
+  // =====================================================
+  // 🔵 USUÁRIO NOVO
+  // =====================================================
+  if (!snap.exists()) {
+
+    // Captura indicador salvo pelo utils.js
+    const indicadoPor = localStorage.getItem("indicadoPor") || null;
+
+    await setDoc(ref, {
+      uid: user.uid,
+      nome: user.displayName || "",
+      email: user.email || "",
+      foto: user.photoURL || "",
+      creditos: 10,
+      role: "user",
+      criadoEm: Date.now(),
+      indicadoPor: indicadoPor,   // valor correto
+      bonusRecebido: false,
+      jaComprou: false,
+    });
+
+    // Registrar na coleção de indicações
+    if (indicadoPor) {
+      await addDoc(collection(db, "indicacoes"), {
+        indicadoPor,
+        indicado: user.uid,
+        data: serverTimestamp(),
+        bonusPago: false,
+      });
+    }
+
+    return user;
+  }
+
+  // =====================================================
+  // 🔵 LOGIN NORMAL
+  // =====================================================
+  const data = snap.data();
+
+  // 🔒 NUNCA rebaixa admin / superadmin
+  let roleFinal = data.role;
+
+  if (roleFinal === "superadmin") {
+    roleFinal = "superadmin";
+  } else if (roleFinal === "admin") {
+    roleFinal = "admin";
+  } else {
+    roleFinal = "user";
+  }
+
+  await updateDoc(ref, {
+    nome: data.nome || user.displayName || "",
+    email: data.email || user.email || "",
+    foto: data.foto || user.photoURL || "",
+    creditos: data.creditos ?? 0,
+    role: roleFinal,
+  });
+
+  return user;
+}
+
+
+// ================= LOGOUT =================
+async function sair() {
+  document.cookie = "betgram_token=; path=/; max-age=0";
+  return signOut(auth);
+}
+
+
+// ================= EXPORTS ==================
+export {
+  auth,
+  db,
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  serverTimestamp,
+  increment,
+  deleteDoc,
+  onAuthStateChanged,
+  loginComGoogle,
+  sair,
+};
