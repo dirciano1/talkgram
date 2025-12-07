@@ -14,8 +14,11 @@ interface Message {
 // mensagem inicial padrão
 const INITIAL_ASSISTANT_MESSAGE: Message = {
   role: "assistant",
-  text: "Olá! Sou o TalkGram, seu assistente de texto do ecossistema NeoGram. Como posso te ajudar hoje a ganhar dinheiro, estruturar seus negócios ou usar a inteligência artificial a seu favor?",
+  text: "const INITIAL_ASSISTANT_MESSAGE: Message = {
+  role: "assistant",
+  text: "Olá! Sou o TalkGram, IA da NeoGram para negócios e dinheiro. Qual ideia, negócio ou grana você quer destravar hoje?",
 };
+
 
 // Limite de mensagens que vão para o contexto (pra não pesar demais)
 const MAX_HISTORY = 12;
