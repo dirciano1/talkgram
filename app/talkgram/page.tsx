@@ -78,7 +78,7 @@ export default function TalkGramPage() {
     return () => clearInterval(intervalId);
   }, [cooldown]);
 
-  // ====== LOGIN (MESMO PADRÃO BETGRAM) ======
+  // ====== LOGIN ======
   async function handleLogin() {
     try {
       const u = await loginComGoogle();
@@ -110,7 +110,7 @@ export default function TalkGramPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/talkgram", {
+      const res = await fetch("/api/ttalkgram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history: historyToSend }),
@@ -175,12 +175,12 @@ export default function TalkGramPage() {
       return;
     }
 
-    // debita 1 crédito no Firestore
+    // debitar crédito
     await descontarCredito(user.uid);
     const novoSaldo = await getCreditos(user.uid);
     setCreditos(novoSaldo);
 
-    // inicia a conversa
+    // inicia nova conversa
     setMessages([INITIAL_ASSISTANT_MESSAGE]);
     setInputValue("");
     setCooldown(0);
@@ -192,8 +192,9 @@ export default function TalkGramPage() {
     setShowNovaConversaModal(false);
   };
 
-  // ====== ESTILOS (IDÊNTICOS AO LOGIN BETGRAM) ======
-
+  // ================================
+  // ESTILOS
+  // ================================
   const mainLoginStyle: React.CSSProperties = {
     display: "flex",
     justifyContent: "center",
@@ -263,7 +264,6 @@ export default function TalkGramPage() {
     alignItems: "center",
     justifyContent: "space-between",
     gap: "10px",
-    flexWrap: "nowrap",
   };
 
   const creditBadgeStyle: React.CSSProperties = {
@@ -275,7 +275,6 @@ export default function TalkGramPage() {
     padding: "4px 10px",
     border: "1px solid rgba(34,197,94,0.3)",
     boxShadow: "0 0 8px rgba(34,197,94,0.2)",
-    flexShrink: 0,
   };
 
   const sairButtonStyle: React.CSSProperties = {
@@ -359,12 +358,10 @@ export default function TalkGramPage() {
     textAlign: "center",
     color: "#9ca3af",
     fontSize: "0.9rem",
-    padding: "0 10px",
   };
 
   const inputAreaStyle: React.CSSProperties = {
     marginTop: "4px",
-    background: "transparent",
   };
 
   const inputRowStyle: React.CSSProperties = {
@@ -395,27 +392,17 @@ export default function TalkGramPage() {
     cursor:
       isLoading || cooldown > 0 || !hasActiveChat ? "not-allowed" : "pointer",
     opacity: isLoading || cooldown > 0 || !hasActiveChat ? 0.8 : 1,
-    whiteSpace: "nowrap",
   };
 
-  // =========================================
+  // ================================
   // RENDER
-  // =========================================
+  // ================================
 
-  // TELA DE LOGIN (IGUAL BETGRAM, SÓ MUDA TEXTO E LOGO)
+  // ❌ TELA DE LOGIN
   if (!user) {
     return (
       <main style={mainLoginStyle}>
         <div style={loginCardStyle}>
-          <h1 style={{ position: "absolute", left: "-9999px", top: "0" }}>
-            TalkGram - IA Financeira da NeoGram
-          </h1>
-          <p style={{ display: "none" }}>
-            O TalkGram é uma IA focada em negócios, ganhos e investimentos,
-            ajudando você a pensar estratégias, oportunidades e caminhos para
-            crescer com inteligência.
-          </p>
-
           <h2
             aria-hidden="true"
             style={{
@@ -441,24 +428,6 @@ export default function TalkGramPage() {
             Converse com uma IA focada em negócios, estratégia e dinheiro.
           </p>
 
-          <div
-            style={{
-              background:
-                "linear-gradient(90deg,rgba(34,197,94,0.2),rgba(34,197,94,0.05))",
-              border: "1px solid #22c55e55",
-              borderRadius: "12px",
-              padding: "10px 20px",
-              color: "#a7f3d0",
-              margin: "20px 0",
-            }}
-          >
-            🎁{" "}
-            <b style={{ color: "#22c55e" }}>
-              Ganhe 10 créditos grátis
-            </b>{" "}
-            ao criar sua conta
-          </div>
-
           <button
             onClick={handleLogin}
             style={{
@@ -474,6 +443,7 @@ export default function TalkGramPage() {
               fontWeight: 600,
               cursor: "pointer",
               width: "100%",
+              marginTop: "20px",
             }}
           >
             <img
@@ -488,27 +458,23 @@ export default function TalkGramPage() {
     );
   }
 
+  // ============================
   // DASHBOARD TALKGRAM
+  // ============================
   const userName = user?.displayName?.split(" ")[0] || "Usuário";
 
   return (
     <>
       <main style={mainStyle}>
-        {/* Título */}
         <h2 style={titleStyle}>
-          <img
-            src="/talkgram-logo.png"
-            alt="Logo TalkGram"
-            style={logoStyle}
-          />
+          <img src="/talkgram-logo.png" alt="Logo" style={logoStyle} />
           <span style={{ color: "#22c55e" }}>
             TalkGram -<span style={{ color: "#fff" }}> IA Financeira</span>
           </span>
         </h2>
 
-        {/* Card central */}
         <div style={cardWrapperStyle}>
-          {/* Header / Créditos / Botões */}
+          {/* Topo do painel */}
           <div style={{ marginBottom: "8px" }}>
             <div style={headerTopRowStyle}>
               <div style={{ fontSize: "1.1rem" }}>
@@ -532,6 +498,7 @@ export default function TalkGramPage() {
               🚪 Sair
             </button>
 
+            {/* BOTÕES MENU */}
             <div style={menuButtonsRowStyle}>
               <button
                 type="button"
@@ -542,27 +509,26 @@ export default function TalkGramPage() {
               </button>
 
               <button
-  type="button"
-  style={addCreditosButtonStyle}
-  onClick={() => {
-    if (!user) {
-      alert("Faça login primeiro.");
-      return;
-    }
+                type="button"
+                style={addCreditosButtonStyle}
+                onClick={() => {
+                  if (!user) {
+                    alert("Faça login primeiro.");
+                    return;
+                  }
+                  const url = `https://betgram.com.br/payments?uid=${user.uid}`;
+                  window.open(url, "_blank");
+                }}
+              >
+                ➕ Adicionar Créditos
+              </button>
+            </div>
+          </div>
 
-    // 🔥 Abre a página de pagamentos do BetGram
-    const url = `https://betgram.com.br/payments?uid=${user.uid}`;
-    window.open(url, "_blank");
-  }}
->
-  ➕ Adicionar Créditos
-</button>
-
-
-          {/* separador */}
+          {/* SEPARADOR */}
           <div style={dividerStyle} />
 
-          {/* Área do chat */}
+          {/* CHAT */}
           <div style={chatWrapperStyle}>
             <div style={messagesAreaStyle} className="talkgram-scroll">
               {hasActiveChat && messages.length > 0 ? (
@@ -593,7 +559,7 @@ export default function TalkGramPage() {
               )}
             </div>
 
-            {/* Input */}
+            {/* INPUT */}
             <div style={inputAreaStyle}>
               <div style={inputRowStyle}>
                 <input
@@ -632,7 +598,7 @@ export default function TalkGramPage() {
         </div>
       </main>
 
-      {/* MODAL NOVA CONVERSA */}
+      {/* ===== MODAL - NOVA CONVERSA ===== */}
       {showNovaConversaModal && (
         <div
           style={{
