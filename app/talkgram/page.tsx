@@ -14,10 +14,10 @@ interface Message {
 // mensagem inicial padrão
 const INITIAL_ASSISTANT_MESSAGE: Message = {
   role: "assistant",
-  text: "const INITIAL_ASSISTANT_MESSAGE: Message = {
-  role: "assistant",
-  text: "Olá! Sou o TalkGram, IA da NeoGram para negócios e dinheiro. Qual ideia, negócio ou grana você quer destravar hoje?",
+  text:
+    "Olá! Sou o TalkGram, IA da NeoGram para negócios e dinheiro. Qual ideia, negócio ou grana você quer destravar hoje?",
 };
+
 
 
 // Limite de mensagens que vão para o contexto (pra não pesar demais)
