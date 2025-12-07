@@ -132,7 +132,7 @@ export default function TalkGramPage() {
 
     // desconta 1 crédito
     if (user) {
-      await descontarCredito(user.uid, 1);
+      await descontarCredito(user.uid);
       const novoSaldo = await getCreditos(user.uid);
       setCreditos(novoSaldo);
     }
