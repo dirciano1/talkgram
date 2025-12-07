@@ -76,7 +76,7 @@ export default function TalkGramPage() {
   const pageStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    height: "83vh",
+    height: "90vh",
     backgroundColor: "#0f1115",
   };
 
