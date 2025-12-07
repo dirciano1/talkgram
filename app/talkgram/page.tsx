@@ -289,7 +289,7 @@ export default function TalkGramPage() {
           style={logoStyle}
         />
         <span style={{ color: "#22c55e" }}>
-          TalkGram -<span style={{ color: "#fff" }}> Converse com IA</span>
+          TalkGram -<span style={{ color: "#fff" }}> IA Financeira</span>
         </span>
       </h2>
 
