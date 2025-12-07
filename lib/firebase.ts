@@ -1,4 +1,4 @@
-// lib/firebase.js
+// lib/firebase.ts
 import { initializeApp } from "firebase/app";
 
 import {
@@ -26,17 +26,17 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
+  User,
 } from "firebase/auth";
-
 
 // ================= CONFIG FIREBASE ==================
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
 // Inicializa Firebase
@@ -45,9 +45,8 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-
 // ================= LOGIN COM GOOGLE =================
-async function loginComGoogle() {
+async function loginComGoogle(): Promise<User> {
   const result = await signInWithPopup(auth, provider);
   const user = result.user;
 
@@ -62,8 +61,6 @@ async function loginComGoogle() {
   // 🔵 USUÁRIO NOVO
   // =====================================================
   if (!snap.exists()) {
-
-    // Captura indicador salvo pelo utils.js
     const indicadoPor = localStorage.getItem("indicadoPor") || null;
 
     await setDoc(ref, {
@@ -74,12 +71,11 @@ async function loginComGoogle() {
       creditos: 10,
       role: "user",
       criadoEm: Date.now(),
-      indicadoPor: indicadoPor,   // valor correto
+      indicadoPor,
       bonusRecebido: false,
       jaComprou: false,
     });
 
-    // Registrar na coleção de indicações
     if (indicadoPor) {
       await addDoc(collection(db, "indicacoes"), {
         indicadoPor,
@@ -95,16 +91,17 @@ async function loginComGoogle() {
   // =====================================================
   // 🔵 LOGIN NORMAL
   // =====================================================
-  const data = snap.data();
+  const data = snap.data() as {
+    nome?: string;
+    email?: string;
+    foto?: string;
+    creditos?: number;
+    role?: string;
+  };
 
-  // 🔒 NUNCA rebaixa admin / superadmin
   let roleFinal = data.role;
 
-  if (roleFinal === "superadmin") {
-    roleFinal = "superadmin";
-  } else if (roleFinal === "admin") {
-    roleFinal = "admin";
-  } else {
+  if (roleFinal !== "superadmin" && roleFinal !== "admin") {
     roleFinal = "user";
   }
 
@@ -119,13 +116,11 @@ async function loginComGoogle() {
   return user;
 }
 
-
 // ================= LOGOUT =================
-async function sair() {
+async function sair(): Promise<void> {
   document.cookie = "betgram_token=; path=/; max-age=0";
-  return signOut(auth);
+  await signOut(auth);
 }
-
 
 // ================= EXPORTS ==================
 export {
