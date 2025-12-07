@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import type React from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import ChatMessage from "@/components/ChatMessage";
+
+// ajuste esses imports de acordo com seu projeto
+import { auth } from "@/lib/firebase"; // ou "@/lib/firebaseClient"
+import {
+  onAuthStateChanged,
+  signOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
 
 type Role = "user" | "assistant";
 
@@ -11,419 +18,409 @@ interface Message {
   text: string;
 }
 
+interface DadosUser {
+  nome: string;
+  creditos: number;
+}
+
+// mensagem inicial padrão
 const INITIAL_ASSISTANT_MESSAGE: Message = {
   role: "assistant",
-  text:
-    "Olá! Sou o TalkGram, IA da NeoGram focada em negócios, ganhos e investimentos. O que você quer alavancar hoje?",
+  text: "Olá! Sou o TalkGram, IA da NeoGram focada em negócios, ganhos e investimentos. O que você quer alavancar hoje?",
 };
 
 // Limite de mensagens que vão para o contexto (pra não pesar demais)
 const MAX_HISTORY = 12;
 
-// ⏱️ Cooldown de 5 segundos entre mensagens
-const COOLDOWN_SECONDS = 5;
-
 export default function TalkGramPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    INITIAL_ASSISTANT_MESSAGE,
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // estado do input local
-  const [inputValue, setInputValue] = useState("");
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [dadosUser, setDadosUser] = useState<DadosUser | null>(null);
+  const [authStatus, setAuthStatus] = useState<
+    "loading" | "logged" | "loggedOut"
+  >("loading");
 
-  // ⏱️ estado do cooldown (segundos restantes)
-  const [cooldown, setCooldown] = useState(0);
+  // controla se o usuário já iniciou uma conversa paga
+  const [hasActiveChat, setHasActiveChat] = useState(false);
 
-  // nome e “créditos” só para layout (você pode trocar depois)
-  const userName = "Dirciano";
-  const creditosVisuais = 9985;
+  // modal de confirmação de nova conversa
+  const [showNovaConversaModal, setShowNovaConversaModal] = useState(false);
 
-  // efeito para contagem regressiva do cooldown
+  // modal de falta de créditos (opcional)
+  const [showSemCreditoModal, setShowSemCreditoModal] = useState(false);
+
+  // ==========================
+  // AUTH + CARREGAR DADOS USER
+  // ==========================
   useEffect(() => {
-    if (cooldown <= 0) return;
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        setAuthStatus("logged");
 
-    const intervalId = setInterval(() => {
-      setCooldown((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalId);
-          return 0;
+        try {
+          // aqui você busca nome e créditos do usuário
+          const resp = await fetch("/api/talkgram/user");
+          if (resp.ok) {
+            const data = await resp.json();
+            setDadosUser({
+              nome: data.nome ?? firebaseUser.displayName ?? "Usuário",
+              creditos: data.creditos ?? 0,
+            });
+          } else {
+            setDadosUser({
+              nome: firebaseUser.displayName ?? "Usuário",
+              creditos: 0,
+            });
+          }
+        } catch (err) {
+          console.error("Erro ao buscar dados do usuário:", err);
+          setDadosUser({
+            nome: firebaseUser.displayName ?? "Usuário",
+            creditos: 0,
+          });
         }
-        return prev - 1;
+      } else {
+        setUser(null);
+        setDadosUser(null);
+        setAuthStatus("loggedOut");
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  // ============
+  // FUNÇÕES UI
+  // ============
+  function handleClickNovaConversa() {
+    setShowNovaConversaModal(true);
+  }
+
+  async function handleConfirmNovaConversa() {
+    if (!user) {
+      // se quiser, redirecione para login aqui
+      alert("Faça login para iniciar uma conversa.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const resp = await fetch("/api/talkgram/nova-conversa", {
+        method: "POST",
       });
-    }, 1000);
 
-    return () => clearInterval(intervalId);
-  }, [cooldown]);
+      const data = await resp.json();
 
-  const handleSend = async (msg: string) => {
-    // não envia se não tiver texto, se estiver carregando ou se estiver em cooldown
-    if (!msg.trim() || isLoading || cooldown > 0) return;
+      if (!resp.ok) {
+        if (data?.code === "SEM_CREDITO") {
+          setShowNovaConversaModal(false);
+          setShowSemCreditoModal(true);
+          return;
+        }
 
-    const userMsg: Message = { role: "user", text: msg };
+        alert(data.error || "Erro ao debitar crédito.");
+        return;
+      }
 
-    // Atualiza a UI imediatamente
-    setMessages((prev) => [...prev, userMsg]);
+      // se a API devolver créditos restantes, atualiza na tela
+      if (typeof data.creditosRestantes === "number") {
+        setDadosUser((prev) =>
+          prev ? { ...prev, creditos: data.creditosRestantes } : prev
+        );
+      }
 
-    // Histórico que será enviado para a API
-    const historyToSend = [...messages, userMsg].slice(-MAX_HISTORY);
+      // reseta mensagens e libera o chat
+      setMessages([INITIAL_ASSISTANT_MESSAGE]);
+      setHasActiveChat(true);
+      setShowNovaConversaModal(false);
+    } catch (err) {
+      console.error("Erro ao iniciar nova conversa:", err);
+      alert("Não foi possível iniciar a conversa. Tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
+  async function handleSendMessage(e: FormEvent) {
+    e.preventDefault();
+    if (!inputValue.trim() || isLoading || !hasActiveChat) return;
+
+    const text = inputValue.trim();
+    const userMessage: Message = { role: "user", text };
+
+    // histórico limitado
+    const historyToSend = [...messages, userMessage].slice(-MAX_HISTORY);
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInputValue("");
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/talkgram", {
+      const resp = await fetch("/api/talkgram/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyToSend }),
+        body: JSON.stringify({ messages: historyToSend }),
       });
 
-      if (!res.ok) {
-        throw new Error("Erro na API");
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(data.error || "Erro na conversa");
       }
 
-      const data = await res.json();
-      const replyText: string =
-        data.reply || "Não consegui responder agora. Tente novamente.";
-
-      const aiMsg: Message = {
+      const assistantMessage: Message = {
         role: "assistant",
-        text: replyText,
+        text: data.reply,
       };
 
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (error) {
-      console.error(error);
-      const errorMsg: Message = {
-        role: "assistant",
-        text: "Tive um problema para responder. Tente novamente em alguns instantes.",
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      console.error("Erro no chat:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: "Tive um problema técnico ao responder. Tente novamente em alguns instantes.",
+        },
+      ]);
     } finally {
       setIsLoading(false);
-      // inicia o cooldown de 5s após cada envio (mesmo se der erro, pra evitar spam)
-      setCooldown(COOLDOWN_SECONDS);
     }
-  };
+  }
 
-  // limpar chat e voltar pra mensagem inicial
-  const handleNovaConversa = () => {
-    setIsLoading(false);
-    setMessages([INITIAL_ASSISTANT_MESSAGE]);
-    setInputValue("");
-    setCooldown(0);
-  };
-
-  // enviar ao clicar no botão
-  const handleSubmit = () => {
-    const texto = inputValue.trim();
-    if (!texto || isLoading || cooldown > 0) return;
-    handleSend(texto);
-    setInputValue("");
-  };
-
-  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (!isLoading && cooldown === 0) {
-        handleSubmit();
-      }
+  async function handleSair() {
+    try {
+      await signOut(auth);
+      window.location.href = "/"; // ajuste a rota de saída/login
+    } catch (err) {
+      console.error("Erro ao sair:", err);
     }
-  };
+  }
 
-  // ====== ESTILOS ======
+  function handleAdicionarCreditos() {
+    // redireciona para página de planos/creditos
+    window.location.href = "/talkgram/creditos";
+  }
 
-  const mainStyle: React.CSSProperties = {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg,#0b1324,#111827)",
-    color: "#fff",
-    fontFamily: "Inter, sans-serif",
-    padding: "0 20px 16px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-  };
+  // =====================
+  // RENDERIZAÇÃO DA PÁGINA
+  // =====================
+  if (authStatus === "loading") {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#020617] text-white">
+        <p>Carregando...</p>
+      </main>
+    );
+  }
 
-  const titleStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    justifyContent: "center",
-    fontSize: "1.6rem",
-    marginTop: "12px",
-    marginBottom: "16px",
-  };
-
-  const logoStyle: React.CSSProperties = {
-    width: "46px",
-    height: "46px",
-    objectFit: "contain",
-  };
-
-  const cardWrapperStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: "700px",
-    background: "rgba(17,24,39,0.85)",
-    border: "1px solid rgba(34,197,94,0.25)",
-    borderRadius: "16px",
-    boxShadow: "0 0 25px rgba(34,197,94,0.08)",
-    padding: "10px",
-    backdropFilter: "blur(8px)",
-    display: "flex",
-    flexDirection: "column",
-    height: "80vh",
-    maxHeight: "80vh",
-  };
-
-  const headerCardStyle: React.CSSProperties = {
-    marginBottom: "8px",
-  };
-
-  const headerTopRowStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    flexWrap: "nowrap",
-  };
-
-  const creditBadgeStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    background: "rgba(17,24,39,0.6)",
-    borderRadius: "8px",
-    padding: "4px 10px",
-    border: "1px solid rgba(34,197,94,0.3)",
-    boxShadow: "0 0 8px rgba(34,197,94,0.2)",
-    flexShrink: 0,
-  };
-
-  const sairButtonStyle: React.CSSProperties = {
-    background: "rgba(239,68,68,0.15)",
-    border: "1px solid #ef444455",
-    borderRadius: "8px",
-    padding: "8px 14px",
-    color: "#f87171",
-    fontWeight: 600,
-    cursor: "pointer",
-    marginTop: "10px",
-    width: "100%",
-  };
-
-  const menuButtonsRowStyle: React.CSSProperties = {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "10px",
-    marginTop: "12px",
-    justifyContent: "center",
-  };
-
-  const baseMenuButtonStyle: React.CSSProperties = {
-    flex: "1 1 48%",
-    minWidth: "140px",
-    borderRadius: "8px",
-    padding: "8px",
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "1px solid transparent",
-  };
-
-  const novaConversaButtonStyle: React.CSSProperties = {
-    ...baseMenuButtonStyle,
-    background: "rgba(14,165,233,0.15)",
-    borderColor: "#0ea5e955",
-    color: "#38bdf8",
-  };
-
-  const addCreditosButtonStyle: React.CSSProperties = {
-    ...baseMenuButtonStyle,
-    background: "rgba(34,197,94,0.15)",
-    borderColor: "#22c55e55",
-    color: "#22c55e",
-  };
-
-  const dividerStyle: React.CSSProperties = {
-    width: "100%",
-    height: "1px",
-    marginTop: "14px",
-    marginBottom: "8px",
-    background:
-      "linear-gradient(90deg, rgba(15,23,42,0), rgba(55,65,81,0.9), rgba(15,23,42,0))",
-  };
-
-  const chatWrapperStyle: React.CSSProperties = {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    borderRadius: "12px",
-    background: "rgba(15,23,42,0.7)",
-    border: "1px solid rgba(15,23,42,0.9)",
-    padding: "10px",
-    minHeight: 0,
-  };
-
-  const messagesAreaStyle: React.CSSProperties = {
-    flex: 1,
-    overflowY: "auto",
-    paddingRight: "4px",
-    marginBottom: "8px",
-    minHeight: 0,
-  };
-
-  // 🔹 input sem fundo preto atrás (apenas o próprio input é escuro)
-  const inputAreaStyle: React.CSSProperties = {
-    marginTop: "4px",
-    background: "transparent",
-  };
-
-  const inputRowStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  };
-
-  const textInputStyle: React.CSSProperties = {
-    flex: 1,
-    background: "#020617",
-    borderRadius: "999px",
-    border: "1px solid rgba(148,163,184,0.6)",
-    padding: "10px 16px",
-    color: "#e5e7eb",
-    outline: "none",
-    fontSize: "0.95rem",
-  };
-
-  const sendButtonStyle: React.CSSProperties = {
-    borderRadius: "999px",
-    border: "none",
-    padding: "10px 20px",
-    background: "linear-gradient(90deg,#22c55e,#16a34a)",
-    color: "#fff",
-    fontWeight: 700,
-    fontSize: "0.95rem",
-    cursor: isLoading || cooldown > 0 ? "not-allowed" : "pointer",
-    opacity: isLoading || cooldown > 0 ? 0.8 : 1,
-    whiteSpace: "nowrap",
-  };
-
-  // ====== RENDER ======
+  if (authStatus === "loggedOut") {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-[#020617] text-white">
+        <div className="bg-slate-900/60 border border-emerald-500/40 rounded-2xl p-6 text-center max-w-sm">
+          <h1 className="text-xl font-semibold mb-3">TalkGram - IA Financeira</h1>
+          <p className="text-gray-300 mb-4">
+            Faça login para acessar sua área do TalkGram.
+          </p>
+          <button
+            onClick={() => (window.location.href = "/login")}
+            className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-semibold"
+          >
+            Ir para login
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <main style={mainStyle}>
-      {/* Título igual BetGram, mas com TalkGram */}
-      <h2 style={titleStyle}>
-        <img
-          src="/talkgram-logo.png"
-          alt="Logo TalkGram"
-          style={logoStyle}
-        />
-        <span style={{ color: "#22c55e" }}>
-          TalkGram -<span style={{ color: "#fff" }}> IA Financeira</span>
-        </span>
-      </h2>
+    <main className="min-h-screen bg-gradient-to-b from-[#020617] to-[#020617] text-white flex justify-center px-3 py-6">
+      <div className="w-full max-w-3xl relative">
+        {/* Cabeçalho */}
+        <header className="mb-5 flex items-center gap-3">
+          <img
+            src="/logos/talkgram-logo.png"
+            alt="TalkGram"
+            className="w-10 h-10"
+          />
+          <div>
+            <h1 className="text-2xl font-bold">
+              <span className="text-emerald-400">TalkGram</span>{" "}
+              <span className="text-white">- IA Financeira</span>
+            </h1>
+            <p className="text-xs text-gray-400">
+              IA da NeoGram focada em negócios, ganhos e investimentos.
+            </p>
+          </div>
+        </header>
 
-      {/* Card central */}
-      <div style={cardWrapperStyle}>
-        {/* “Menu” do topo */}
-        <div style={headerCardStyle}>
-          <div style={headerTopRowStyle}>
-            <div style={{ fontSize: "1.1rem" }}>
-              👋 Olá, <b>{userName}</b>
+        {/* Card principal */}
+        <section className="bg-slate-900/60 border border-emerald-500/30 rounded-3xl p-4 sm:p-5 shadow-xl">
+          {/* Linha de saudação + créditos */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <p className="text-sm text-gray-300">
+                👋 Olá,{" "}
+                <span className="font-semibold">
+                  {dadosUser?.nome ?? "Usuário"}
+                </span>
+              </p>
             </div>
-            <div style={creditBadgeStyle}>
-              💰{" "}
-              <span
-                style={{
-                  color: "#22c55e",
-                  fontWeight: 600,
-                  fontSize: "1rem",
-                }}
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-full bg-emerald-600/20 px-3 py-1 border border-emerald-500/40 text-sm">
+                <span className="text-yellow-300 text-lg">💰</span>
+                <span className="font-semibold">
+                  {dadosUser?.creditos ?? 0}
+                </span>
+              </div>
+
+              <button
+                onClick={handleSair}
+                className="px-3 py-1 rounded-full bg-red-700/70 border border-red-500/60 text-sm font-semibold"
               >
-                {creditosVisuais}
-              </span>
+                Sair
+              </button>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              window.location.href = "/";
-            }}
-            style={sairButtonStyle}
-          >
-            🚪 Sair
-          </button>
-
-          <div style={menuButtonsRowStyle}>
+          {/* Botões de ação */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <button
-              type="button"
-              style={novaConversaButtonStyle}
-              onClick={handleNovaConversa}
+              onClick={handleClickNovaConversa}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-500 transition text-sm font-semibold shadow-md"
             >
               🆕 Nova conversa
             </button>
 
             <button
-              type="button"
-              style={addCreditosButtonStyle}
-              onClick={() =>
-                alert("Em breve: créditos / plano premium do TalkGram.")
-              }
+              onClick={handleAdicionarCreditos}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 transition text-sm font-semibold shadow-md"
             >
               ➕ Adicionar Créditos
             </button>
           </div>
-        </div>
 
-        {/* separador entre os botões e o chat */}
-        <div style={dividerStyle} />
-
-        {/* Área do chat */}
-        <div style={chatWrapperStyle}>
-          <div
-            style={messagesAreaStyle}
-            className="talkgram-scroll"
-          >
-            {messages.map((m, i) => (
-              <ChatMessage key={i} role={m.role} text={m.text} />
-            ))}
-
-            {isLoading && (
-              <ChatMessage
-                role="assistant"
-                text="Pensando na melhor resposta..."
-              />
+          {/* Área de mensagens */}
+          <div className="mt-3 h-[55vh] sm:h-[60vh] bg-slate-950/60 rounded-2xl border border-slate-800 overflow-y-auto px-3 py-3">
+            {hasActiveChat ? (
+              messages.map((m, i) => (
+                <ChatMessage key={i} role={m.role} text={m.text} />
+              ))
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 text-sm px-4">
+                <p className="mb-2">
+                  Clique em{" "}
+                  <span className="text-emerald-400 font-semibold">
+                    Nova conversa
+                  </span>{" "}
+                  para iniciar.
+                </p>
+                <p>
+                  Cada nova conversa consome{" "}
+                  <span className="text-emerald-400 font-semibold">
+                    1 crédito
+                  </span>
+                  .
+                </p>
+              </div>
             )}
           </div>
 
-          {/* Input SEM fundo preto atrás */}
-          <div style={inputAreaStyle}>
-            <div style={inputRowStyle}>
-              <input
-                type="text"
-                placeholder="Digite sua mensagem..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                style={textInputStyle}
-                disabled={isLoading}
-              />
+          {/* Input */}
+          <form
+            onSubmit={handleSendMessage}
+            className="mt-4 flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder={
+                hasActiveChat
+                  ? "Digite sua mensagem..."
+                  : "Clique em Nova conversa para começar"
+              }
+              disabled={!hasActiveChat || isLoading}
+              className="flex-1 rounded-full bg-slate-950/80 border border-slate-700 px-4 py-3 text-sm outline-none focus:border-emerald-500 disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={!hasActiveChat || isLoading || !inputValue.trim()}
+              className="px-5 py-3 rounded-full bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold disabled:opacity-60"
+            >
+              {isLoading ? "Enviando..." : "Enviar"}
+            </button>
+          </form>
+        </section>
+      </div>
+
+      {/* MODAL NOVA CONVERSA */}
+      {showNovaConversaModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50">
+          <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl p-5 max-w-sm w-full">
+            <h3 className="text-lg font-semibold text-white mb-3">
+              Iniciar nova conversa?
+            </h3>
+            <p className="text-gray-300 text-sm mb-4">
+              Esta nova conversa irá consumir{" "}
+              <span className="text-emerald-400 font-semibold">1 crédito</span>.
+              Deseja continuar?
+            </p>
+            <div className="flex justify-end gap-3">
               <button
-                type="button"
-                onClick={handleSubmit}
-                style={sendButtonStyle}
-                disabled={isLoading || cooldown > 0 || !inputValue.trim()}
+                onClick={() => setShowNovaConversaModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-700 text-gray-100 text-sm"
               >
-                {isLoading
-                  ? "Gerando..."
-                  : cooldown > 0
-                  ? `Aguarde ${cooldown}s`
-                  : "Enviar"}
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmNovaConversa}
+                disabled={isLoading}
+                className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {isLoading ? "Processando..." : "Confirmar"}
               </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* MODAL SEM CRÉDITO */}
+      {showSemCreditoModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50">
+          <div className="bg-slate-900 border border-red-500/60 rounded-2xl p-5 max-w-sm w-full">
+            <h3 className="text-lg font-semibold text-white mb-3">
+              Créditos insuficientes
+            </h3>
+            <p className="text-gray-300 text-sm mb-4">
+              Você não possui créditos suficientes para iniciar uma nova
+              conversa.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowSemCreditoModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-700 text-gray-100 text-sm"
+              >
+                Fechar
+              </button>
+              <button
+                onClick={() => {
+                  setShowSemCreditoModal(false);
+                  handleAdicionarCreditos();
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold"
+              >
+                Adicionar créditos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
