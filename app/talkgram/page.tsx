@@ -509,19 +509,20 @@ export default function TalkGramPage() {
               </button>
 
               <button
-                type="button"
-                style={addCreditosButtonStyle}
-                onClick={() => {
-                  if (!user) {
-                    alert("Faça login primeiro.");
-                    return;
-                  }
-                  const url = `https://betgram.com.br/payments?uid=${user.uid}`;
-                  window.open(url, "_blank");
-                }}
-              >
-                ➕ Adicionar Créditos
-              </button>
+  type="button"
+  style={addCreditosButtonStyle}
+  onClick={() => {
+    if (!user) {
+      alert("Faça login primeiro.");
+      return;
+    }
+
+    const url = `https://dirciano1.github.io/neogram/payments?uid=${user.uid}`;
+    window.open(url, "_blank");
+  }}
+>
+  ➕ Adicionar Créditos
+</button>
             </div>
           </div>
 
