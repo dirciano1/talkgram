@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type React from "react";
 import ChatMessage from "@/components/ChatMessage";
 
@@ -20,6 +20,9 @@ const INITIAL_ASSISTANT_MESSAGE: Message = {
 // Limite de mensagens que vão para o contexto (pra não pesar demais)
 const MAX_HISTORY = 12;
 
+// ⏱️ Cooldown de 5 segundos entre mensagens
+const COOLDOWN_SECONDS = 5;
+
 export default function TalkGramPage() {
   const [messages, setMessages] = useState<Message[]>([
     INITIAL_ASSISTANT_MESSAGE,
@@ -29,12 +32,33 @@ export default function TalkGramPage() {
   // estado do input local
   const [inputValue, setInputValue] = useState("");
 
+  // ⏱️ estado do cooldown (segundos restantes)
+  const [cooldown, setCooldown] = useState(0);
+
   // nome e “créditos” só para layout (você pode trocar depois)
   const userName = "Dirciano";
   const creditosVisuais = 9985;
 
+  // efeito para contagem regressiva do cooldown
+  useEffect(() => {
+    if (cooldown <= 0) return;
+
+    const intervalId = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [cooldown]);
+
   const handleSend = async (msg: string) => {
-    if (!msg.trim() || isLoading) return;
+    // não envia se não tiver texto, se estiver carregando ou se estiver em cooldown
+    if (!msg.trim() || isLoading || cooldown > 0) return;
 
     const userMsg: Message = { role: "user", text: msg };
 
@@ -76,6 +100,8 @@ export default function TalkGramPage() {
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
+      // inicia o cooldown de 5s após cada envio (mesmo se der erro, pra evitar spam)
+      setCooldown(COOLDOWN_SECONDS);
     }
   };
 
@@ -84,12 +110,13 @@ export default function TalkGramPage() {
     setIsLoading(false);
     setMessages([INITIAL_ASSISTANT_MESSAGE]);
     setInputValue("");
+    setCooldown(0);
   };
 
-  // enviar ao clicar no botão ou apertar Enter
+  // enviar ao clicar no botão
   const handleSubmit = () => {
     const texto = inputValue.trim();
-    if (!texto) return;
+    if (!texto || isLoading || cooldown > 0) return;
     handleSend(texto);
     setInputValue("");
   };
@@ -97,7 +124,9 @@ export default function TalkGramPage() {
   const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      handleSubmit();
+      if (!isLoading && cooldown === 0) {
+        handleSubmit();
+      }
     }
   };
 
@@ -272,8 +301,8 @@ export default function TalkGramPage() {
     color: "#fff",
     fontWeight: 700,
     fontSize: "0.95rem",
-    cursor: isLoading ? "not-allowed" : "pointer",
-    opacity: isLoading ? 0.8 : 1,
+    cursor: isLoading || cooldown > 0 ? "not-allowed" : "pointer",
+    opacity: isLoading || cooldown > 0 ? 0.8 : 1,
     whiteSpace: "nowrap",
   };
 
@@ -380,9 +409,13 @@ export default function TalkGramPage() {
                 type="button"
                 onClick={handleSubmit}
                 style={sendButtonStyle}
-                disabled={isLoading}
+                disabled={isLoading || cooldown > 0 || !inputValue.trim()}
               >
-                Enviar
+                {isLoading
+                  ? "Gerando..."
+                  : cooldown > 0
+                  ? `Aguarde ${cooldown}s`
+                  : "Enviar"}
               </button>
             </div>
           </div>
