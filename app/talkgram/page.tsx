@@ -382,7 +382,7 @@ export default function TalkGramPage() {
         <div style={chatWrapperStyle}>
           <div
             style={messagesAreaStyle}
-            className="talkgram-scroll"   {/* 👈 AQUI entra a classe */}
+            className="talkgram-scroll"
           >
             {messages.map((m, i) => (
               <ChatMessage key={i} role={m.role} text={m.text} />
