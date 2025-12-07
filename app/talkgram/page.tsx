@@ -4,6 +4,11 @@ import { useState, useEffect } from "react";
 import type React from "react";
 import ChatMessage from "@/components/ChatMessage";
 
+import { auth, onAuthStateChanged } from "@/lib/firebase";
+import { getCreditos } from "@/utils/getCreditos";
+import { descontarCredito } from "@/utils/descontarCredito";
+import type { User } from "firebase/auth";
+
 type Role = "user" | "assistant";
 
 interface Message {
@@ -40,9 +45,39 @@ export default function TalkGramPage() {
   // modal de confirmação de nova conversa
   const [showNovaConversaModal, setShowNovaConversaModal] = useState(false);
 
-  // nome e “créditos” por enquanto só no front (depois você troca pra Firestore/Webhook)
-  const userName = "Dirciano";
-  const [creditos, setCreditos] = useState<number>(9985);
+  // usuário autenticado (Firebase)
+  const [user, setUser] = useState<User | null>(null);
+
+  // créditos vindos do Firestore
+  const [creditos, setCreditos] = useState<number>(0);
+
+  // controla carregamento inicial de auth/creditos
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+
+  // efeito para observar o estado de autenticação
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+
+      if (firebaseUser) {
+        try {
+          const c = await getCreditos(firebaseUser.uid);
+          setCreditos(c ?? 0);
+        } catch (err) {
+          console.error("Erro ao carregar créditos:", err);
+          setCreditos(0);
+        }
+      } else {
+        setCreditos(0);
+        setHasActiveChat(false);
+        setMessages([]);
+      }
+
+      setIsLoadingUser(false);
+    });
+
+    return () => unsub();
+  }, []);
 
   // efeito para contagem regressiva do cooldown
   useEffect(() => {
@@ -114,26 +149,49 @@ export default function TalkGramPage() {
 
   // clicar no botão Nova conversa → só abre o modal
   const handleNovaConversa = () => {
+    if (!user) {
+      alert("Você precisa estar logado para iniciar uma conversa.");
+      return;
+    }
     setShowNovaConversaModal(true);
   };
 
   // confirmar no modal → consome 1 crédito e inicia conversa
-  const handleConfirmNovaConversa = () => {
-    if (creditos <= 0) {
-      alert("Você está sem créditos. Adicione créditos para iniciar uma nova conversa.");
+  const handleConfirmNovaConversa = async () => {
+    if (!user) {
+      alert("Você precisa estar logado para iniciar uma conversa.");
       setShowNovaConversaModal(false);
       return;
     }
 
-    // aqui no futuro você vai chamar API/Firestore pra debitar o crédito
-    setCreditos((prev) => prev - 1);
+    if (creditos <= 0) {
+      alert(
+        "Você está sem créditos. Adicione créditos para iniciar uma nova conversa."
+      );
+      setShowNovaConversaModal(false);
+      return;
+    }
 
-    setIsLoading(false);
-    setMessages([INITIAL_ASSISTANT_MESSAGE]);
-    setInputValue("");
-    setCooldown(0);
-    setHasActiveChat(true);
-    setShowNovaConversaModal(false);
+    try {
+      // debitando no Firestore
+      await descontarCredito(user.uid);
+
+      // espelha no front
+      setCreditos((prev) => prev - 1);
+
+      setIsLoading(false);
+      setMessages([INITIAL_ASSISTANT_MESSAGE]);
+      setInputValue("");
+      setCooldown(0);
+      setHasActiveChat(true);
+    } catch (err) {
+      console.error("Erro ao descontar crédito:", err);
+      alert(
+        "Não foi possível debitar o crédito agora. Tente novamente em instantes."
+      );
+    } finally {
+      setShowNovaConversaModal(false);
+    }
   };
 
   const handleCancelNovaConversa = () => {
@@ -156,6 +214,8 @@ export default function TalkGramPage() {
       }
     }
   };
+
+  const userName = user?.displayName || "Visitante";
 
   // ====== ESTILOS ======
 
@@ -376,7 +436,7 @@ export default function TalkGramPage() {
                     fontSize: "1rem",
                   }}
                 >
-                  {creditos}
+                  {isLoadingUser ? "…" : creditos}
                 </span>
               </div>
             </div>
@@ -440,7 +500,6 @@ export default function TalkGramPage() {
                     </span>{" "}
                     para iniciar.
                   </p>
-                  
                 </div>
               )}
             </div>
@@ -527,7 +586,9 @@ export default function TalkGramPage() {
               }}
             >
               Esta nova conversa irá consumir{" "}
-              <span style={{ color: "#22c55e", fontWeight: 600 }}>1 crédito</span>
+              <span style={{ color: "#22c55e", fontWeight: 600 }}>
+                1 crédito
+              </span>
               . Deseja continuar?
             </p>
 
