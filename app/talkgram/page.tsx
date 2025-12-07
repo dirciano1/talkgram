@@ -3,7 +3,6 @@
 import { useState } from "react";
 import type React from "react";
 import ChatMessage from "@/components/ChatMessage";
-import ChatInput from "@/components/ChatInput";
 
 type Role = "user" | "assistant";
 
@@ -26,6 +25,9 @@ export default function TalkGramPage() {
     INITIAL_ASSISTANT_MESSAGE,
   ]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // estado do input local
+  const [inputValue, setInputValue] = useState("");
 
   // nome e “créditos” só para layout (você pode trocar depois)
   const userName = "Dirciano";
@@ -81,6 +83,22 @@ export default function TalkGramPage() {
   const handleNovaConversa = () => {
     setIsLoading(false);
     setMessages([INITIAL_ASSISTANT_MESSAGE]);
+    setInputValue("");
+  };
+
+  // enviar ao clicar no botão ou apertar Enter
+  const handleSubmit = () => {
+    const texto = inputValue.trim();
+    if (!texto) return;
+    handleSend(texto);
+    setInputValue("");
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   // ====== ESTILOS ======
@@ -90,7 +108,7 @@ export default function TalkGramPage() {
     background: "linear-gradient(135deg,#0b1324,#111827)",
     color: "#fff",
     fontFamily: "Inter, sans-serif",
-    padding: "0 20px 16px", // menos padding embaixo pra caber o 80vh
+    padding: "0 20px 16px",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -123,7 +141,7 @@ export default function TalkGramPage() {
     backdropFilter: "blur(8px)",
     display: "flex",
     flexDirection: "column",
-    height: "80vh",          // 🔹 agora o card todo tem 80vh
+    height: "80vh",
     maxHeight: "80vh",
   };
 
@@ -205,14 +223,14 @@ export default function TalkGramPage() {
   };
 
   const chatWrapperStyle: React.CSSProperties = {
-    flex: 1,                            // 🔹 ocupa todo o espaço restante
+    flex: 1,
     display: "flex",
     flexDirection: "column",
     borderRadius: "12px",
     background: "rgba(15,23,42,0.7)",
     border: "1px solid rgba(15,23,42,0.9)",
     padding: "10px",
-    minHeight: 0,                       // 🔹 necessário pra o overflow funcionar
+    minHeight: 0,
   };
 
   const messagesAreaStyle: React.CSSProperties = {
@@ -223,8 +241,40 @@ export default function TalkGramPage() {
     minHeight: 0,
   };
 
+  // 🔹 input sem fundo preto atrás (apenas o próprio input é escuro)
   const inputAreaStyle: React.CSSProperties = {
     marginTop: "4px",
+    background: "transparent",
+  };
+
+  const inputRowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  };
+
+  const textInputStyle: React.CSSProperties = {
+    flex: 1,
+    background: "#020617",
+    borderRadius: "999px",
+    border: "1px solid rgba(148,163,184,0.6)",
+    padding: "10px 16px",
+    color: "#e5e7eb",
+    outline: "none",
+    fontSize: "0.95rem",
+  };
+
+  const sendButtonStyle: React.CSSProperties = {
+    borderRadius: "999px",
+    border: "none",
+    padding: "10px 20px",
+    background: "linear-gradient(90deg,#22c55e,#16a34a)",
+    color: "#fff",
+    fontWeight: 700,
+    fontSize: "0.95rem",
+    cursor: isLoading ? "not-allowed" : "pointer",
+    opacity: isLoading ? 0.8 : 1,
+    whiteSpace: "nowrap",
   };
 
   // ====== RENDER ======
@@ -314,8 +364,27 @@ export default function TalkGramPage() {
             )}
           </div>
 
+          {/* Input SEM fundo preto atrás */}
           <div style={inputAreaStyle}>
-            <ChatInput onSend={handleSend} />
+            <div style={inputRowStyle}>
+              <input
+                type="text"
+                placeholder="Digite sua mensagem..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                style={textInputStyle}
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                style={sendButtonStyle}
+                disabled={isLoading}
+              >
+                Enviar
+              </button>
+            </div>
           </div>
         </div>
       </div>
