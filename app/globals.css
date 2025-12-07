@@ -1,12 +1,50 @@
-html, body {
+/* ====== RESET BÁSICO ====== */
+html,
+body {
   height: 100%;
   margin: 0;
   padding: 0;
   background-color: #0f1115;
-  color: white;
-  font-family: Arial, Helvetica, sans-serif;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", Arial, Helvetica,
+    sans-serif;
 }
 
-* {
+/* Garante box-sizing consistente em tudo */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+/* Remove sublinhado padrão de links (ajusta como quiser depois) */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ====== SCROLLBAR TALKGRAM ====== */
+.talkgram-scroll {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #22c55e66 #020617;
+}
+
+/* Chrome, Edge, Safari */
+.talkgram-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.talkgram-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 999px;
+}
+
+.talkgram-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  border-radius: 999px;
+}
+
+.talkgram-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #4ade80, #22c55e);
 }
