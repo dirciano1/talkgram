@@ -25,12 +25,11 @@ export default function TalkGramPage() {
   const [messages, setMessages] = useState<Message[]>([
     INITIAL_ASSISTANT_MESSAGE,
   ]);
-
   const [isLoading, setIsLoading] = useState(false);
 
-  // aqui você pode futuramente puxar do Firebase/Auth
+  // nome e “créditos” só para layout (você pode trocar depois)
   const userName = "Dirciano";
-  const creditos = 9985;
+  const creditosVisuais = 9985;
 
   const handleSend = async (msg: string) => {
     if (!msg.trim() || isLoading) return;
@@ -78,220 +77,192 @@ export default function TalkGramPage() {
     }
   };
 
-  // ---------- NOVA CONVERSA ----------
+  // limpar chat e voltar pra mensagem inicial
   const handleNovaConversa = () => {
     setIsLoading(false);
     setMessages([INITIAL_ASSISTANT_MESSAGE]);
   };
 
-  // ====== ESTILOS ======
+  // ====== ESTILOS (copiados/ajustados com base no BetGram) ======
 
-  const pageStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-    backgroundColor: "#05080c",
-  };
-
-  const headerStyle: React.CSSProperties = {
-    padding: "14px 18px",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
-    backgroundColor: "#05080c",
+  const mainStyle: React.CSSProperties = {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#0b1324,#111827)",
+    color: "#fff",
+    fontFamily: "Inter, sans-serif",
+    padding: "0px 20px 8vh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
+  };
+
+  const titleStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
     justifyContent: "center",
-    gap: 4,
-  };
-
-  const headerInnerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
+    fontSize: "1.6rem",
+    marginTop: "12px",
+    marginBottom: "16px",
   };
 
   const logoStyle: React.CSSProperties = {
-    width: 40,
-    height: 40,
-    borderRadius: "50%",
-    objectFit: "cover",
+    width: "46px",
+    height: "46px",
+    objectFit: "contain",
   };
 
-  const titleWrapperStyle: React.CSSProperties = {
-    fontSize: 20,
-    fontWeight: 700,
-    display: "flex",
-    alignItems: "baseline",
-    gap: 4,
-  };
-
-  const subtitleStyle: React.CSSProperties = {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.75)",
-    textAlign: "center",
-  };
-
-  // container do “menu” estilo BetGram
-  const menuWrapperStyle: React.CSSProperties = {
-    padding: "16px",
-    display: "flex",
-    justifyContent: "center",
-  };
-
-  const menuCardStyle: React.CSSProperties = {
+  const cardWrapperStyle: React.CSSProperties = {
     width: "100%",
-    maxWidth: 600,
-    borderRadius: 18,
-    border: "1px solid rgba(34,197,94,0.3)",
-    background:
-      "radial-gradient(circle at top left, #0b1924 0%, #020617 55%, #020617 100%)",
-    boxShadow: "0 18px 40px rgba(0,0,0,0.7)",
-    padding: "14px 14px 16px",
+    maxWidth: "700px",
+    background: "rgba(17,24,39,0.85)",
+    border: "1px solid rgba(34,197,94,0.25)",
+    borderRadius: "16px",
+    boxShadow: "0 0 25px rgba(34,197,94,0.08)",
+    padding: "10px",
+    backdropFilter: "blur(8px)",
     display: "flex",
     flexDirection: "column",
-    gap: 10,
+    maxHeight: "80vh",
   };
 
-  const menuTopRowStyle: React.CSSProperties = {
+  const headerCardStyle: React.CSSProperties = {
+    marginBottom: "16px",
+  };
+
+  const headerTopRowStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-  };
-
-  const saudacaoStyle: React.CSSProperties = {
-    fontSize: 14,
-    color: "#e5e7eb",
-  };
-
-  const nomeUsuarioStyle: React.CSSProperties = {
-    fontWeight: 600,
-    color: "#ffffff",
+    gap: "10px",
+    flexWrap: "nowrap",
   };
 
   const creditBadgeStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
-    gap: 6,
+    gap: "6px",
+    background: "rgba(17,24,39,0.6)",
+    borderRadius: "8px",
     padding: "4px 10px",
-    borderRadius: 999,
-    background:
-      "linear-gradient(135deg, rgba(250,204,21,0.15), rgba(250,204,21,0.05))",
-    border: "1px solid rgba(250,204,21,0.55)",
-    fontSize: 13,
-    color: "#facc15",
-    fontWeight: 600,
-  };
-
-  const creditIconStyle: React.CSSProperties = {
-    fontSize: 16,
+    border: "1px solid rgba(34,197,94,0.3)",
+    boxShadow: "0 0 8px rgba(34,197,94,0.2)",
+    flexShrink: 0,
   };
 
   const sairButtonStyle: React.CSSProperties = {
-    marginTop: 8,
-    width: "100%",
-    borderRadius: 999,
-    padding: "10px 16px",
-    border: "1px solid rgba(248,113,113,0.6)",
-    background:
-      "linear-gradient(135deg, rgba(248,113,113,0.2), rgba(127,29,29,0.3))",
-    color: "#fecaca",
+    background: "rgba(239,68,68,0.15)",
+    border: "1px solid #ef444455",
+    borderRadius: "8px",
+    padding: "8px 14px",
+    color: "#f87171",
     fontWeight: 600,
-    fontSize: 15,
-    textAlign: "center",
     cursor: "pointer",
+    marginTop: "10px",
+    width: "100%",
   };
 
   const menuButtonsRowStyle: React.CSSProperties = {
     display: "flex",
-    gap: 10,
-    marginTop: 10,
+    flexWrap: "wrap",
+    gap: "10px",
+    marginTop: "12px",
+    justifyContent: "center",
   };
 
   const baseMenuButtonStyle: React.CSSProperties = {
-    flex: 1,
-    borderRadius: 14,
-    padding: "10px 12px",
-    border: "1px solid transparent",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    fontSize: 14,
+    flex: "1 1 48%",
+    minWidth: "140px",
+    borderRadius: "8px",
+    padding: "8px",
     fontWeight: 600,
     cursor: "pointer",
-    whiteSpace: "nowrap",
+    border: "1px solid transparent",
   };
 
   const novaConversaButtonStyle: React.CSSProperties = {
     ...baseMenuButtonStyle,
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(15,23,42,0.9))",
-    borderColor: "rgba(59,130,246,0.7)",
-    color: "#bfdbfe",
+    background: "rgba(14,165,233,0.15)",
+    borderColor: "#0ea5e955",
+    color: "#38bdf8",
   };
 
-  const adicionarCreditosButtonStyle: React.CSSProperties = {
+  const addCreditosButtonStyle: React.CSSProperties = {
     ...baseMenuButtonStyle,
-    background:
-      "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(5,46,22,0.9))",
-    borderColor: "rgba(34,197,94,0.7)",
-    color: "#bbf7d0",
+    background: "rgba(34,197,94,0.15)",
+    borderColor: "#22c55e55",
+    color: "#22c55e",
   };
 
-  const mainStyle: React.CSSProperties = {
+  const chatWrapperStyle: React.CSSProperties = {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    borderRadius: "12px",
+    background: "rgba(15,23,42,0.7)",
+    border: "1px solid rgba(15,23,42,0.9)",
+    padding: "10px",
+    maxHeight: "100%",
+  };
+
+  const messagesAreaStyle: React.CSSProperties = {
     flex: 1,
     overflowY: "auto",
-    padding: "0 16px 12px",
+    paddingRight: "4px",
+    marginBottom: "8px",
   };
 
-  const mainInnerStyle: React.CSSProperties = {
-    maxWidth: 800,
-    margin: "0 auto",
+  const inputAreaStyle: React.CSSProperties = {
+    marginTop: "4px",
   };
 
   // ====== RENDER ======
+
   return (
-    <div style={pageStyle}>
-      {/* Header original do TalkGram */}
-      <header style={headerStyle}>
-        <div style={headerInnerStyle}>
-          <img src="/talkgram-logo.png" alt="TalkGram" style={logoStyle} />
+    <main style={mainStyle}>
+      {/* Título igual BetGram, mas com TalkGram */}
+      <h2 style={titleStyle}>
+        <img
+          src="/talkgram-logo.png"
+          alt="Logo TalkGram"
+          style={logoStyle}
+        />
+        <span style={{ color: "#22c55e" }}>
+          TalkGram -<span style={{ color: "#fff" }}> Assistente de Conversa</span>
+        </span>
+      </h2>
 
-          <div style={titleWrapperStyle}>
-            <span style={{ color: "#22c55e" }}>TalkGram -</span>
-            <span style={{ color: "#ffffff" }}>Assistente AI</span>
-          </div>
-        </div>
-
-        <div style={subtitleStyle}>
-          Plataforma de conversa com inteligência artificial do ecossistema NeoGram.
-        </div>
-      </header>
-
-      {/* Menu estilo BetGram */}
-      <section style={menuWrapperStyle}>
-        <div style={menuCardStyle}>
-          <div style={menuTopRowStyle}>
-            <div style={saudacaoStyle}>
-              👋 Olá, <span style={nomeUsuarioStyle}>{userName}</span>
+      {/* Card central igual BetGram */}
+      <div style={cardWrapperStyle}>
+        {/* “Menu” do topo */}
+        <div style={headerCardStyle}>
+          <div style={headerTopRowStyle}>
+            <div style={{ fontSize: "1.1rem" }}>
+              👋 Olá, <b>{userName}</b>
             </div>
-
             <div style={creditBadgeStyle}>
-              <span style={creditIconStyle}>💰</span>
-              <span>{creditos}</span>
+              💰{" "}
+              <span
+                style={{
+                  color: "#22c55e",
+                  fontWeight: 600,
+                  fontSize: "1rem",
+                }}
+              >
+                {creditosVisuais}
+              </span>
             </div>
           </div>
 
           <button
             type="button"
-            style={sairButtonStyle}
             onClick={() => {
-              // ajuste isso depois para o seu fluxo de logout real
-              // por exemplo: signOut(auth) ou redirecionar
+              // aqui é só visual; se quiser depois podemos ligar no Firebase Auth
               window.location.href = "/";
             }}
+            style={sairButtonStyle}
           >
-            📕 Sair
+            🚪 Sair
           </button>
 
           <div style={menuButtonsRowStyle}>
@@ -305,35 +276,36 @@ export default function TalkGramPage() {
 
             <button
               type="button"
-              style={adicionarCreditosButtonStyle}
-              onClick={() => {
-                // Aqui você pode depois abrir um modal/link Betgram Pay
-                alert("Em breve: adicionar créditos no TalkGram.");
-              }}
+              style={addCreditosButtonStyle}
+              onClick={() =>
+                alert("Em breve: créditos / plano premium do TalkGram.")
+              }
             >
               ➕ Adicionar Créditos
             </button>
           </div>
         </div>
-      </section>
 
-      {/* Área do chat */}
-      <main style={mainStyle}>
-        <div style={mainInnerStyle}>
-          {messages.map((m, i) => (
-            <ChatMessage key={i} role={m.role} text={m.text} />
-          ))}
+        {/* Área do chat dentro do mesmo card */}
+        <div style={chatWrapperStyle}>
+          <div style={messagesAreaStyle}>
+            {messages.map((m, i) => (
+              <ChatMessage key={i} role={m.role} text={m.text} />
+            ))}
 
-          {isLoading && (
-            <ChatMessage
-              role="assistant"
-              text="Pensando na melhor resposta..."
-            />
-          )}
+            {isLoading && (
+              <ChatMessage
+                role="assistant"
+                text="Pensando na melhor resposta..."
+              />
+            )}
+          </div>
+
+          <div style={inputAreaStyle}>
+            <ChatInput onSend={handleSend} />
+          </div>
         </div>
-      </main>
-
-      <ChatInput onSend={handleSend} />
-    </div>
+      </div>
+    </main>
   );
 }
