@@ -233,7 +233,7 @@ export default function TalkGramPage() {
     alignItems: "center",
     gap: "8px",
     justifyContent: "center",
-    fontSize: "1.6rem",
+    fontSize: "1.4rem",
     marginTop: "12px",
     marginBottom: "16px",
   };
@@ -410,7 +410,7 @@ export default function TalkGramPage() {
               alignItems: "center",
               gap: "8px",
               justifyContent: "center",
-              fontSize: "1.6rem",
+              fontSize: "1.4rem",
               marginBottom: "8px",
             }}
           >
