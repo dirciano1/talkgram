@@ -90,7 +90,7 @@ export default function TalkGramPage() {
     background: "linear-gradient(135deg,#0b1324,#111827)",
     color: "#fff",
     fontFamily: "Inter, sans-serif",
-    padding: "0px 20px 8vh",
+    padding: "0 20px 16px", // menos padding embaixo pra caber o 80vh
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -123,7 +123,8 @@ export default function TalkGramPage() {
     backdropFilter: "blur(8px)",
     display: "flex",
     flexDirection: "column",
-    maxHeight: "80vh", // 🔹 limite total ~80vh
+    height: "80vh",          // 🔹 agora o card todo tem 80vh
+    maxHeight: "80vh",
   };
 
   const headerCardStyle: React.CSSProperties = {
@@ -194,7 +195,6 @@ export default function TalkGramPage() {
     color: "#22c55e",
   };
 
-  // 🔹 separador entre menu e chat
   const dividerStyle: React.CSSProperties = {
     width: "100%",
     height: "1px",
@@ -205,15 +205,14 @@ export default function TalkGramPage() {
   };
 
   const chatWrapperStyle: React.CSSProperties = {
-    flex: 1,
+    flex: 1,                            // 🔹 ocupa todo o espaço restante
     display: "flex",
     flexDirection: "column",
     borderRadius: "12px",
     background: "rgba(15,23,42,0.7)",
     border: "1px solid rgba(15,23,42,0.9)",
     padding: "10px",
-    maxHeight: "100%",
-    minHeight: 0, // importante pro flex funcionar bem dentro do maxHeight
+    minHeight: 0,                       // 🔹 necessário pra o overflow funcionar
   };
 
   const messagesAreaStyle: React.CSSProperties = {
@@ -244,7 +243,7 @@ export default function TalkGramPage() {
         </span>
       </h2>
 
-      {/* Card central igual BetGram */}
+      {/* Card central */}
       <div style={cardWrapperStyle}>
         {/* “Menu” do topo */}
         <div style={headerCardStyle}>
@@ -269,7 +268,6 @@ export default function TalkGramPage() {
           <button
             type="button"
             onClick={() => {
-              // aqui é só visual; se quiser depois podemos ligar no Firebase Auth
               window.location.href = "/";
             }}
             style={sairButtonStyle}
@@ -301,7 +299,7 @@ export default function TalkGramPage() {
         {/* separador entre os botões e o chat */}
         <div style={dividerStyle} />
 
-        {/* Área do chat dentro do mesmo card */}
+        {/* Área do chat */}
         <div style={chatWrapperStyle}>
           <div style={messagesAreaStyle}>
             {messages.map((m, i) => (
