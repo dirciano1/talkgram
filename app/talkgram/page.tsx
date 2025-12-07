@@ -13,9 +13,9 @@ interface Message {
 
 const INITIAL_ASSISTANT_MESSAGE: Message = {
   role: "assistant",
-  text: "Olá! Sou o TalkGram, assistente de IA da NeoGram focado em negócios, ganhos e investimentos. O que você quer alavancar hoje?",
+  text:
+    "Olá! Sou o TalkGram, assistente de IA da NeoGram focado em negócios, ganhos e investimentos. O que você quer alavancar hoje?",
 };
-
 
 // Limite de mensagens que vão para o contexto (pra não pesar demais)
 const MAX_HISTORY = 12;
