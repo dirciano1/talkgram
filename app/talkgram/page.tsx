@@ -83,7 +83,7 @@ export default function TalkGramPage() {
     setMessages([INITIAL_ASSISTANT_MESSAGE]);
   };
 
-  // ====== ESTILOS (copiados/ajustados com base no BetGram) ======
+  // ====== ESTILOS ======
 
   const mainStyle: React.CSSProperties = {
     minHeight: "100vh",
@@ -123,11 +123,11 @@ export default function TalkGramPage() {
     backdropFilter: "blur(8px)",
     display: "flex",
     flexDirection: "column",
-    maxHeight: "80vh",
+    maxHeight: "80vh", // 🔹 limite total ~80vh
   };
 
   const headerCardStyle: React.CSSProperties = {
-    marginBottom: "16px",
+    marginBottom: "8px",
   };
 
   const headerTopRowStyle: React.CSSProperties = {
@@ -194,6 +194,16 @@ export default function TalkGramPage() {
     color: "#22c55e",
   };
 
+  // 🔹 separador entre menu e chat
+  const dividerStyle: React.CSSProperties = {
+    width: "100%",
+    height: "1px",
+    marginTop: "14px",
+    marginBottom: "8px",
+    background:
+      "linear-gradient(90deg, rgba(15,23,42,0), rgba(55,65,81,0.9), rgba(15,23,42,0))",
+  };
+
   const chatWrapperStyle: React.CSSProperties = {
     flex: 1,
     display: "flex",
@@ -203,6 +213,7 @@ export default function TalkGramPage() {
     border: "1px solid rgba(15,23,42,0.9)",
     padding: "10px",
     maxHeight: "100%",
+    minHeight: 0, // importante pro flex funcionar bem dentro do maxHeight
   };
 
   const messagesAreaStyle: React.CSSProperties = {
@@ -210,6 +221,7 @@ export default function TalkGramPage() {
     overflowY: "auto",
     paddingRight: "4px",
     marginBottom: "8px",
+    minHeight: 0,
   };
 
   const inputAreaStyle: React.CSSProperties = {
@@ -285,6 +297,9 @@ export default function TalkGramPage() {
             </button>
           </div>
         </div>
+
+        {/* separador entre os botões e o chat */}
+        <div style={dividerStyle} />
 
         {/* Área do chat dentro do mesmo card */}
         <div style={chatWrapperStyle}>
