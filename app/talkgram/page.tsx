@@ -63,7 +63,7 @@ export default function TalkGramPage() {
       console.error(error);
       const errorMsg: Message = {
         role: "assistant",
-        text: "Tive um problema ao falar com o Gemini. Tente novamente em alguns instantes.",
+        text: "Tive um problema para responder. Tente novamente em alguns instantes.",
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
