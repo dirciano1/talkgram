@@ -440,13 +440,7 @@ export default function TalkGramPage() {
                     </span>{" "}
                     para iniciar.
                   </p>
-                  <p style={{ marginTop: "4px" }}>
-                    Cada nova conversa consome{" "}
-                    <span style={{ color: "#22c55e", fontWeight: 600 }}>
-                      1 crédito
-                    </span>
-                    .
-                  </p>
+                  
                 </div>
               )}
             </div>
