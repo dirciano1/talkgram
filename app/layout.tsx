@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   metadataBase: new URL("https://talkgram.ai"), // altere depois para o domínio final
 
-  title: "TalkGram — Assistente de IA para Negócios, Ganhos e Estratégias Financeiras",
+  title: "TalkGram - Assistente de IA para Negócios, Ganhos e Estratégias Financeiras",
   description:
     "O TalkGram é uma inteligência artificial avançada focada em negócios, dinheiro, estratégias financeiras e tomadas de decisão. Parte do ecossistema NeoGram, criado para impulsionar resultados reais.",
 
