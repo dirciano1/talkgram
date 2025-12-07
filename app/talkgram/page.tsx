@@ -542,16 +542,22 @@ export default function TalkGramPage() {
               </button>
 
               <button
-                type="button"
-                style={addCreditosButtonStyle}
-                onClick={() =>
-                  alert("Em breve: créditos / plano premium do TalkGram.")
-                }
-              >
-                ➕ Adicionar Créditos
-              </button>
-            </div>
-          </div>
+  type="button"
+  style={addCreditosButtonStyle}
+  onClick={() => {
+    if (!user) {
+      alert("Faça login primeiro.");
+      return;
+    }
+
+    // 🔥 Abre a página de pagamentos do BetGram
+    const url = `https://betgram.com.br/payments?uid=${user.uid}`;
+    window.open(url, "_blank");
+  }}
+>
+  ➕ Adicionar Créditos
+</button>
+
 
           {/* separador */}
           <div style={dividerStyle} />
