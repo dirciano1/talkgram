@@ -473,12 +473,10 @@ export default function TalkGramPage() {
   <span
     onClick={handleNovaConversa}
     style={{
-      color: "#22c55e",
+      color: "#38bdf8",
       fontWeight: 600,
       cursor: "pointer",
       marginLeft: 5,
-      textDecoration: "underline",
-      textUnderlineOffset: "3px",
       transition: "0.2s"
     }}
     onMouseEnter={(e) => (e.currentTarget.style.color = "#4ade80")}
