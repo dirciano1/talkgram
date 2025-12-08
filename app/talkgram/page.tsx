@@ -469,9 +469,26 @@ export default function TalkGramPage() {
               </>
             ) : (
               <div style={{ textAlign: "center", marginTop: "20px", color: "#aaa" }}>
-                Clique em{" "}
-                <b style={{ color: "#22c55e" }}>Nova conversa</b> para iniciar.
-              </div>
+  Clique em 
+  <span
+    onClick={handleNovaConversa}
+    style={{
+      color: "#22c55e",
+      fontWeight: 600,
+      cursor: "pointer",
+      marginLeft: 5,
+      textDecoration: "underline",
+      textUnderlineOffset: "3px",
+      transition: "0.2s"
+    }}
+    onMouseEnter={(e) => (e.currentTarget.style.color = "#4ade80")}
+    onMouseLeave={(e) => (e.currentTarget.style.color = "#22c55e")}
+  >
+    Nova conversa
+  </span>
+  {" "}para iniciar.
+</div>
+
             )}
           </div>
 
