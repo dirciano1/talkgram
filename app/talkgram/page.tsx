@@ -336,20 +336,11 @@ export default function TalkGramPage() {
     <>
       <main style={mainStyle}>
         {/* TÍTULO */}
-        <h2
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            marginTop: "12px",
-            marginBottom: "16px",
-          }}
-        >
-          <img src="/talkgram-logo.png" style={logoStyle} />
-          <span style={{ color: "#22c55e" }}>
-            TalkGram - <span style={{ color: "#fff" }}>IA Financeira</span>
-          </span>
-        </h2>
+        <h2 style="display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 1.6rem;">
+       <img src="/talkgram-logo.png" alt="Logo TalkGram" style="width: 46px; height: 46px; object-fit: contain;">
+       <span style="color: rgb(34, 197, 94);">TalkGram -<span style="color: rgb(255, 255, 255);">IA Financeira</span>
+       </span>
+       </h2>
 
         <div style={cardWrapperStyle}>
           {/* HEADER */}
