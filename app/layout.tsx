@@ -80,7 +80,7 @@ export default function RootLayout({
         />
 
         {/* Favicon */}
-        <link rel="icon" href="/favicon.png" />
+        <link rel="icon" href="/favicon.ico" />
       </head>
 
       <body
