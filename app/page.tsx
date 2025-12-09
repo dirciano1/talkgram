@@ -1,65 +1,637 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+import { useState, useEffect } from "react";
+import type React from "react";
+import ChatMessage from "@/components/ChatMessage";
+
+import {
+  auth,
+  onAuthStateChanged,
+  loginComGoogle,
+  sair,
+  db,
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "@/lib/firebase";
+
+import { getCreditos } from "@/utils/getCreditos";
+import { descontarCredito } from "@/utils/descontarCredito";
+
+type Role = "user" | "assistant";
+
+interface Message {
+  role: Role;
+  text: string;
+}
+
+const INITIAL_ASSISTANT_MESSAGE: Message = {
+  role: "assistant",
+  text:
+    "Olá! Sou o TalkGram, IA da NeoGram focada em negócios, ganhos e investimentos. O que você quer alavancar hoje?",
+};
+
+const MAX_HISTORY = 12;
+const COOLDOWN_SECONDS = 5;
+
+export default function TalkGramPage() {
+  // ====== AUTH ======
+  const [user, setUser] = useState<any | null>(null);
+  const [creditos, setCreditos] = useState<number>(0);
+
+  // ====== CHAT ======
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const [hasActiveChat, setHasActiveChat] = useState(false);
+
+  // MODAL: nova conversa
+  const [showNovaConversaModal, setShowNovaConversaModal] = useState(false);
+
+  // LISTENER AUTH
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+
+        const ref = doc(db, "users", firebaseUser.uid);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          // PRIMEIRA VEZ → 10 conversas grátis
+          await setDoc(ref, {
+            uid: firebaseUser.uid,
+            nome: firebaseUser.displayName || "Usuário",
+            email: firebaseUser.email || "",
+            creditos: 10,
+            criadoEm: serverTimestamp(),
+            jaComprou: false,
+          });
+          setCreditos(10);
+        } else {
+          setCreditos(snap.data().creditos ?? 0);
+        }
+      } else {
+        setUser(null);
+        setCreditos(0);
+        setMessages([]);
+        setHasActiveChat(false);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  // COOLDOWN
+  useEffect(() => {
+    if (cooldown <= 0) return;
+
+    const id = setInterval(() => {
+      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [cooldown]);
+
+  // LOGIN
+  async function handleLogin() {
+    try {
+      const u = await loginComGoogle();
+      setUser(u);
+
+      const ref = doc(db, "users", u.uid);
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          uid: u.uid,
+          nome: u.displayName || "Usuário",
+          email: u.email || "",
+          creditos: 10,
+          criadoEm: serverTimestamp(),
+          jaComprou: false,
+        });
+        setCreditos(10);
+      } else {
+        setCreditos(snap.data().creditos ?? 0);
+      }
+    } catch (err: any) {
+      alert("Erro ao fazer login: " + err.message);
+    }
+  }
+
+  // LOGOUT
+  async function handleLogout() {
+    await sair();
+    setUser(null);
+    setCreditos(0);
+    setMessages([]);
+    setHasActiveChat(false);
+  }
+
+  // ENVIAR MENSAGEM
+  const handleSend = async (msg: string) => {
+    if (!msg.trim() || isLoading || cooldown > 0 || !hasActiveChat) return;
+
+    const userMsg: Message = { role: "user", text: msg };
+    setMessages((prev) => [...prev, userMsg]);
+
+    const historyToSend = [...messages, userMsg].slice(-MAX_HISTORY);
+
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/talkgram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ history: historyToSend }),
+      });
+
+      if (!res.ok) throw new Error("Erro na API");
+
+      const data = await res.json();
+
+      const aiMsg: Message = {
+        role: "assistant",
+        text: data.reply || "Não consegui responder agora. Tente novamente.",
+      };
+
+      setMessages((prev) => [...prev, aiMsg]);
+    } catch (error) {
+      console.error(error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "Erro ao responder. Tente novamente." },
+      ]);
+    } finally {
+      setIsLoading(false);
+      setCooldown(COOLDOWN_SECONDS);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (!hasActiveChat || isLoading || cooldown > 0) return;
+    if (!inputValue.trim()) return;
+    handleSend(inputValue.trim());
+    setInputValue("");
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  // NOVA CONVERSA
+  const handleNovaConversa = () => setShowNovaConversaModal(true);
+
+  const handleConfirmNovaConversa = async () => {
+    if (!user) return alert("Faça login.");
+    if (creditos <= 0) {
+      alert("Você não tem créditos suficientes.");
+      setShowNovaConversaModal(false);
+      return;
+    }
+
+    await descontarCredito(user.uid);
+    const novoSaldo = await getCreditos(user.uid);
+    setCreditos(novoSaldo);
+
+    setMessages([INITIAL_ASSISTANT_MESSAGE]);
+    setInputValue("");
+    setCooldown(0);
+    setHasActiveChat(true);
+    setShowNovaConversaModal(false);
+  };
+
+  const handleCancelNovaConversa = () => setShowNovaConversaModal(false);
+
+  // =======================
+  // ESTILOS
+  // =======================
+
+  const mainLoginStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100vh",
+    background: "linear-gradient(135deg,#0b1324,#111827)",
+    color: "#fff",
+  };
+
+  const loginCardStyle: React.CSSProperties = {
+    background: "rgba(17,24,39,0.85)",
+    border: "2px solid #22c55e55",
+    borderRadius: "16px",
+    padding: "40px 30px",
+    width: "90%",
+    maxWidth: "400px",
+    textAlign: "center",
+    boxShadow: "0 0 25px rgba(34,197,94,0.15)",
+  };
+
+  const mainStyle: React.CSSProperties = {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#0b1324,#111827)",
+    color: "#fff",
+    padding: "0 20px 16px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  };
+
+  const logoStyle: React.CSSProperties = {
+    width: "46px",
+    height: "46px",
+  };
+
+  const cardWrapperStyle: React.CSSProperties = {
+    width: "100%",
+    maxWidth: "700px",
+    background: "rgba(17,24,39,0.85)",
+    border: "1px solid rgba(34,197,94,0.25)",
+    borderRadius: "16px",
+    padding: "12px",
+    boxShadow: "0 0 18px rgba(34,197,94,0.12)",
+    height: "80vh",
+    display: "flex",
+    flexDirection: "column",
+  };
+
+  // ==========================================
+  // LOGIN SCREEN
+  // ==========================================
+  if (!user) {
+    return (
+      <main style={mainLoginStyle}>
+        <div style={loginCardStyle}>
+          <h2
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              justifyContent: "center",
+              fontSize: "1.5rem",
+            }}
+          >
+            <img src="/talkgram-logo.png" style={logoStyle} />
+            <span>
+              Bem-vindo ao <span style={{ color: "#22c55e" }}>TalkGram</span>
+            </span>
+          </h2>
+
+          <p style={{ color: "#ccc" }}>
+            Converse com uma IA treinada para negócios, dinheiro e estratégias.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+          <div
+            style={{
+              background: "rgba(34,197,94,0.15)",
+              border: "1px solid #22c55e55",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              margin: "20px 0",
+              textAlign: "center",
+              color: "#a7f3d0",
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            🎁 <b style={{ color: "#22c55e" }}>Ganhe 10 conversas grátis</b> ao
+            criar sua conta
+          </div>
+
+          <button
+            onClick={handleLogin}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "12px",
+              background: "#fff",
+              color: "#000",
+              padding: "14px 28px",
+              fontWeight: 600,
+              borderRadius: "50px",
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
+            }}
           >
-            Documentation
-          </a>
+            <img src="https://www.svgrepo.com/show/355037/google.svg" width={22} />
+            Entrar com Google
+          </button>
         </div>
       </main>
-    </div>
+    );
+  }
+
+  // ==========================================
+  // DASHBOARD
+  // ==========================================
+  const userName = user.displayName?.split(" ")[0];
+
+  return (
+    <>
+      <main style={mainStyle}>
+        {/* TÍTULO */}
+        <h2 style="display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 1.6rem;">
+       <img src="/talkgram-logo.png" alt="Logo TalkGram" style="width: 46px; height: 46px; object-fit: contain;">
+       <span style="color: rgb(34, 197, 94);">TalkGram -<span style="color: rgb(255, 255, 255);">IA Financeira</span>
+       </span>
+       </h2>
+
+        <div style={cardWrapperStyle}>
+          {/* HEADER */}
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "10px",
+              }}
+            >
+              <div>
+                👋 Olá, <b>{userName}</b>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "rgba(17,24,39,0.6)",
+                  padding: "5px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(34,197,94,0.3)",
+                  fontWeight: 600,
+                }}
+              >
+                💰{" "}
+                <span style={{ color: "#22c55e", fontWeight: 700 }}>
+                  {creditos}
+                </span>
+              </div>
+            </div>
+
+            {/* BOTÃO SAIR */}
+            <button
+              onClick={handleLogout}
+              style={{
+                background: "rgba(239,68,68,0.15)",
+                border: "1px solid #ef444455",
+                color: "#f87171",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                width: "100%",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              🚪 Sair
+            </button>
+
+            {/* BOTÕES MENU */}
+            <div style={{ display: "flex", gap: "10px", marginTop: "14px" }}>
+              <button
+                onClick={handleNovaConversa}
+                style={{
+                  flex: 1,
+                  background: "rgba(14,165,233,0.15)",
+                  border: "1px solid #0ea5e955",
+                  borderRadius: "8px",
+                  padding: "8px 0",
+                  color: "#38bdf8",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                🆕 Nova conversa
+              </button>
+
+              <button
+                onClick={() => {
+                  const url = `https://dirciano1.github.io/neogram/payments?uid=${user.uid}`;
+                  window.open(url, "_blank");
+                }}
+                style={{
+                  flex: 1,
+                  background: "rgba(34,197,94,0.15)",
+                  border: "1px solid #22c55e55",
+                  borderRadius: "8px",
+                  padding: "8px 0",
+                  color: "#22c55e",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                ➕ Adicionar Créditos
+              </button>
+            </div>
+          </div>
+
+          {/* CHAT */}
+          <div
+            className="talkgram-scroll"
+            style={{
+              flex: 1,
+              marginTop: "14px",
+              background: "rgba(10,16,28,0.8)",
+              borderRadius: "14px",
+              padding: "14px",
+              overflowY: "auto",
+              border: "1px solid rgba(34,197,94,0.15)",
+              boxShadow: "0 0 12px rgba(0,0,0,0.25) inset",
+            }}
+          >
+            {hasActiveChat && messages.length > 0 ? (
+              <>
+                {messages.map((m, i) => (
+                  <ChatMessage key={i} role={m.role} text={m.text} />
+                ))}
+
+                {isLoading && (
+                  <ChatMessage
+                    role="assistant"
+                    text="Pensando na melhor resposta..."
+                  />
+                )}
+              </>
+            ) : (
+              <div style={{ textAlign: "center", marginTop: "20px", color: "#aaa" }}>
+  Clique em 
+  <span
+    onClick={handleNovaConversa}
+    style={{
+      color: "#38bdf8",
+      fontWeight: 600,
+      cursor: "pointer",
+      marginLeft: 5,
+      transition: "0.2s"
+    }}
+    onMouseEnter={(e) => (e.currentTarget.style.color = "#4ade80")}
+    onMouseLeave={(e) => (e.currentTarget.style.color = "#22c55e")}
+  >
+    Nova conversa
+  </span>
+  {" "}para iniciar.
+</div>
+
+            )}
+          </div>
+
+          {/* INPUT */}
+          <div style={{ marginTop: "12px" }}>
+            <div style={{ display: "flex", gap: "10px" }}>
+              {/* CAMPO DE TEXTO */}
+              <input
+                type="text"
+                placeholder={
+                  hasActiveChat
+                    ? "Digite sua mensagem..."
+                    : "Clique em Nova conversa para começar"
+                }
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={!hasActiveChat || isLoading}
+                style={{
+                  flex: 1,
+                  background: "rgb(3,7,18)",
+                  borderRadius: "9999px",
+                  border: "1px solid rgba(34,197,94,0.35)",
+                  padding: "14px 18px",
+                  color: "#e5e7eb",
+                  fontSize: "0.95rem",
+                  outline: "none",
+                  transition: "all 0.2s ease",
+                }}
+                onFocus={(e) => {
+                  e.target.style.boxShadow = "0 0 12px rgba(34,197,94,0.35)";
+                  e.target.style.border = "1px solid rgba(34,197,94,0.8)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.boxShadow = "none";
+                  e.target.style.border = "1px solid rgba(34,197,94,0.35)";
+                }}
+              />
+
+              {/* BOTÃO ENVIAR */}
+              <button
+                onClick={handleSubmit}
+                disabled={!hasActiveChat || isLoading || cooldown > 0}
+                style={{
+                  background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                  padding: "14px 26px",
+                  borderRadius: "9999px",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  color: "#fff",
+                  cursor:
+                    !hasActiveChat || isLoading || cooldown > 0
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity: !hasActiveChat || cooldown > 0 ? 0.5 : 1,
+                  transition: "0.25s",
+                  boxShadow: "0 0 12px rgba(34,197,94,0.25)",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isLoading && cooldown === 0)
+                    e.currentTarget.style.boxShadow =
+                      "0 0 18px rgba(34,197,94,0.45)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow =
+                    "0 0 12px rgba(34,197,94,0.25)";
+                }}
+              >
+                {isLoading
+                  ? "Gerando..."
+                  : cooldown > 0
+                  ? `Aguarde ${cooldown}s`
+                  : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* MODAL NOVA CONVERSA */}
+      {showNovaConversaModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              background: "#020617",
+              padding: "20px",
+              borderRadius: "16px",
+              border: "1px solid rgba(34,197,94,0.6)",
+              width: "100%",
+              maxWidth: "360px",
+            }}
+          >
+            <h3 style={{ marginBottom: "8px" }}>Iniciar nova conversa?</h3>
+
+            <p style={{ color: "#ddd", fontSize: "0.9rem" }}>
+              Isso consumirá{" "}
+              <span style={{ color: "#22c55e", fontWeight: 600 }}>
+                1 crédito.
+              </span>
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                justifyContent: "flex-end",
+                marginTop: "12px",
+              }}
+            >
+              <button
+                onClick={handleCancelNovaConversa}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(148,163,184,0.4)",
+                  background: "transparent",
+                  color: "#e5e7eb",
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={handleConfirmNovaConversa}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: "999px",
+                  background: "linear-gradient(90deg,#22c55e,#16a34a)",
+                  border: "none",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
