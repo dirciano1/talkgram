@@ -36,21 +36,18 @@ const MAX_HISTORY = 12;
 const COOLDOWN_SECONDS = 5;
 
 export default function TalkGramPage() {
-  // ====== AUTH ======
   const [user, setUser] = useState<any | null>(null);
   const [creditos, setCreditos] = useState<number>(0);
 
-  // ====== CHAT ======
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [hasActiveChat, setHasActiveChat] = useState(false);
 
-  // MODAL: nova conversa
   const [showNovaConversaModal, setShowNovaConversaModal] = useState(false);
 
-  // LISTENER AUTH
+  // ===================== AUTH =====================
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -60,7 +57,6 @@ export default function TalkGramPage() {
         const snap = await getDoc(ref);
 
         if (!snap.exists()) {
-          // PRIMEIRA VEZ → 10 conversas grátis
           await setDoc(ref, {
             uid: firebaseUser.uid,
             nome: firebaseUser.displayName || "Usuário",
@@ -84,7 +80,7 @@ export default function TalkGramPage() {
     return () => unsub();
   }, []);
 
-  // COOLDOWN
+  // ===================== COOLDOWN =====================
   useEffect(() => {
     if (cooldown <= 0) return;
 
@@ -95,7 +91,7 @@ export default function TalkGramPage() {
     return () => clearInterval(id);
   }, [cooldown]);
 
-  // LOGIN
+  // ===================== LOGIN =====================
   async function handleLogin() {
     try {
       const u = await loginComGoogle();
@@ -122,7 +118,6 @@ export default function TalkGramPage() {
     }
   }
 
-  // LOGOUT
   async function handleLogout() {
     await sair();
     setUser(null);
@@ -131,7 +126,7 @@ export default function TalkGramPage() {
     setHasActiveChat(false);
   }
 
-  // ENVIAR MENSAGEM
+  // ===================== CHAT =====================
   const handleSend = async (msg: string) => {
     if (!msg.trim() || isLoading || cooldown > 0 || !hasActiveChat) return;
 
@@ -160,7 +155,6 @@ export default function TalkGramPage() {
 
       setMessages((prev) => [...prev, aiMsg]);
     } catch (error) {
-      console.error(error);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", text: "Erro ao responder. Tente novamente." },
@@ -185,7 +179,7 @@ export default function TalkGramPage() {
     }
   };
 
-  // NOVA CONVERSA
+  // ===================== NOVA CONVERSA =====================
   const handleNovaConversa = () => setShowNovaConversaModal(true);
 
   const handleConfirmNovaConversa = async () => {
@@ -209,10 +203,7 @@ export default function TalkGramPage() {
 
   const handleCancelNovaConversa = () => setShowNovaConversaModal(false);
 
-  // =======================
-  // ESTILOS
-  // =======================
-
+  // ===================== ESTILOS =====================
   const mainLoginStyle: React.CSSProperties = {
     display: "flex",
     justifyContent: "center",
@@ -261,9 +252,7 @@ export default function TalkGramPage() {
     flexDirection: "column",
   };
 
-  // ==========================================
-  // LOGIN SCREEN
-  // ==========================================
+  // ===================== LOGIN SCREEN =====================
   if (!user) {
     return (
       <main style={mainLoginStyle}>
@@ -327,20 +316,33 @@ export default function TalkGramPage() {
     );
   }
 
-  // ==========================================
-  // DASHBOARD
-  // ==========================================
+  // ===================== DASHBOARD =====================
   const userName = user.displayName?.split(" ")[0];
 
   return (
     <>
       <main style={mainStyle}>
         {/* TÍTULO */}
-        <h2 style="display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 1.6rem;">
-       <img src="/talkgram-logo.png" alt="Logo TalkGram" style="width: 46px; height: 46px; object-fit: contain;">
-       <span style="color: rgb(34, 197, 94);">TalkGram -<span style="color: rgb(255, 255, 255);">IA Financeira</span>
-       </span>
-       </h2>
+        <h2
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            justifyContent: "center",
+            fontSize: "1.6rem",
+          }}
+        >
+          <img
+            src="/talkgram-logo.png"
+            alt="Logo TalkGram"
+            style={{ width: "46px", height: "46px", objectFit: "contain" }}
+          />
+
+          <span style={{ color: "rgb(34,197,94)" }}>
+            TalkGram -{" "}
+            <span style={{ color: "rgb(255,255,255)" }}>IA Financeira</span>
+          </span>
+        </h2>
 
         <div style={cardWrapperStyle}>
           {/* HEADER */}
@@ -459,32 +461,33 @@ export default function TalkGramPage() {
                 )}
               </>
             ) : (
-              <div style={{ textAlign: "center", marginTop: "20px", color: "#aaa" }}>
-  Clique em 
-  <span
-    onClick={handleNovaConversa}
-    style={{
-      color: "#38bdf8",
-      fontWeight: 600,
-      cursor: "pointer",
-      marginLeft: 5,
-      transition: "0.2s"
-    }}
-    onMouseEnter={(e) => (e.currentTarget.style.color = "#4ade80")}
-    onMouseLeave={(e) => (e.currentTarget.style.color = "#22c55e")}
-  >
-    Nova conversa
-  </span>
-  {" "}para iniciar.
-</div>
-
+              <div
+                style={{
+                  textAlign: "center",
+                  marginTop: "20px",
+                  color: "#aaa",
+                }}
+              >
+                Clique em{" "}
+                <span
+                  onClick={handleNovaConversa}
+                  style={{
+                    color: "#38bdf8",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    marginLeft: 5,
+                  }}
+                >
+                  Nova conversa
+                </span>{" "}
+                para iniciar.
+              </div>
             )}
           </div>
 
           {/* INPUT */}
           <div style={{ marginTop: "12px" }}>
             <div style={{ display: "flex", gap: "10px" }}>
-              {/* CAMPO DE TEXTO */}
               <input
                 type="text"
                 placeholder={
@@ -505,19 +508,9 @@ export default function TalkGramPage() {
                   color: "#e5e7eb",
                   fontSize: "0.95rem",
                   outline: "none",
-                  transition: "all 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.boxShadow = "0 0 12px rgba(34,197,94,0.35)";
-                  e.target.style.border = "1px solid rgba(34,197,94,0.8)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.boxShadow = "none";
-                  e.target.style.border = "1px solid rgba(34,197,94,0.35)";
                 }}
               />
 
-              {/* BOTÃO ENVIAR */}
               <button
                 onClick={handleSubmit}
                 disabled={!hasActiveChat || isLoading || cooldown > 0}
@@ -533,18 +526,6 @@ export default function TalkGramPage() {
                     !hasActiveChat || isLoading || cooldown > 0
                       ? "not-allowed"
                       : "pointer",
-                  opacity: !hasActiveChat || cooldown > 0 ? 0.5 : 1,
-                  transition: "0.25s",
-                  boxShadow: "0 0 12px rgba(34,197,94,0.25)",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading && cooldown === 0)
-                    e.currentTarget.style.boxShadow =
-                      "0 0 18px rgba(34,197,94,0.45)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow =
-                    "0 0 12px rgba(34,197,94,0.25)";
                 }}
               >
                 {isLoading
@@ -558,7 +539,7 @@ export default function TalkGramPage() {
         </div>
       </main>
 
-      {/* MODAL NOVA CONVERSA */}
+      {/* ===================== MODAL ===================== */}
       {showNovaConversaModal && (
         <div
           style={{
