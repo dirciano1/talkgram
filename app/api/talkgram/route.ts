@@ -39,107 +39,101 @@ FORMATO (REGRA RÍGIDA):
 - TODA resposta deve ter NO MÁXIMO 5 LINHAS.
 - Só ultrapasse 5 linhas se o usuário pedir explicitamente “em detalhes / guia completo”.
 - Nunca diga que você é rede social de voz; você é um chat por texto.
-
+`;
 
 export async function POST(req: NextRequest) {
-  if (!GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY não configurada");
-    return NextResponse.json(
-      { error: "Chave do Gemini não configurada" },
-      { status: 500 }
-    );
-  }
+  if (!GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY não configurada");
+    return NextResponse.json(
+      { error: "Chave do Gemini não configurada" },
+      { status: 500 }
+    );
+  }
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "JSON inválido na requisição." },
-      { status: 400 }
-    );
-  }
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "JSON inválido na requisição." },
+      { status: 400 }
+    );
+  }
 
-  const history = body.history as { role: "user" | "assistant"; text: string }[] | undefined;
-  const singleMessage = body.message as string | undefined;
+  const history = body.history as
+    | { role: "user" | "assistant"; text: string }[]
+    | undefined;
 
-  if ((!history || !Array.isArray(history) || history.length === 0) && !singleMessage) {
-    return NextResponse.json(
-      { error: "É necessário enviar 'history' ou 'message'." },
-      { status: 400 }
-    );
-  }
+  const singleMessage = body.message as string | undefined;
 
-  // Monta o "contents" no formato da API do Gemini
-  let contents: any[] = [];
+  if (
+    (!history || !Array.isArray(history) || history.length === 0) &&
+    !singleMessage
+  ) {
+    return NextResponse.json(
+      { error: "É necessário enviar 'history' ou 'message'." },
+      { status: 400 }
+    );
+  }
 
-  // Primeiro, o system prompt como mensagem de usuário (contexto)
-  contents.push({
-    role: "user",
-    parts: [{ text: SYSTEM_PROMPT }],
-  });
+  // Monta o "contents" no formato da API do Gemini
+  let contents: any[] = [];
 
-  if (history && Array.isArray(history) && history.length > 0) {
-    // Converte o histórico em mensagens user/model
-    const mapped = history.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.text }],
-    }));
+  // System prompt como primeira mensagem (contexto)
+  contents.push({
+    role: "user",
+    parts: [{ text: SYSTEM_PROMPT }],
+  });
 
-    contents = contents.concat(mapped);
-  } else if (singleMessage) {
-    // Fallback: só uma mensagem simples
-    contents.push({
-      role: "user",
-      parts: [{ text: singleMessage }],
-    });
-  }
+  if (history && Array.isArray(history) && history.length > 0) {
+    const mapped = history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.text }],
+    }));
 
-  try {
-    // Usa v1beta porque estamos usando tools.google_search
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    contents = contents.concat(mapped);
+  } else if (singleMessage) {
+    contents.push({
+      role: "user",
+      parts: [{ text: singleMessage }],
+    });
+  }
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents,
-        tools: [
-          {
-            google_search: {},
-          },
-        ],
-      }),
-    });
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      console.error("Erro na API Gemini:", response.status, errorData);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents,
+        tools: [{ google_search: {} }],
+      }),
+    });
 
-      return NextResponse.json(
-        {
-          error: "Erro ao chamar o Gemini.",
-          details: errorData,
-        },
-        { status: 500 }
-      );
-    }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      console.error("Erro na API Gemini:", response.status, errorData);
 
-    const data = await response.json();
+      return NextResponse.json(
+        { error: "Erro ao chamar o Gemini.", details: errorData },
+        { status: 500 }
+      );
+    }
 
-    const replyText: string =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((p: any) => p?.text ?? "")
-        .join("") || "Não consegui gerar uma resposta agora.";
+    const data = await response.json();
 
-    return NextResponse.json({ reply: replyText });
-  } catch (err) {
-    console.error("Erro de rede ou inesperado ao falar com o Gemini:", err);
-    return NextResponse.json(
-      { error: "Falha de rede ao falar com o Gemini." },
-      { status: 500 }
-    );
-  }
+    const replyText: string =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((p: any) => (typeof p?.text === "string" ? p.text : ""))
+        .join("") || "Não consegui gerar uma resposta agora.";
+
+    return NextResponse.json({ reply: replyText });
+  } catch (err) {
+    console.error("Erro de rede ou inesperado ao falar com o Gemini:", err);
+    return NextResponse.json(
+      { error: "Falha de rede ao falar com o Gemini." },
+      { status: 500 }
+    );
+  }
 }
